@@ -1,5 +1,5 @@
 #include "emulator/app.h"
 
-int main(int argc, char** argv) {
+__attribute__((weak)) int main(int argc, char** argv) {
     return RunEmulator(argc, argv);
 }

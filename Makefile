@@ -12,7 +12,7 @@ SDL_LDFLAGS := $(shell sdl2-config --libs 2>/dev/null)
 CXXFLAGS += $(SDL_CFLAGS)
 LDFLAGS += $(SDL_LDFLAGS)
 
-SRCS = $(shell find . -name '*.cpp')
+SRCS = $(shell find ./src -name '*.cpp')
 OBJS = $(patsubst ./%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
 LIB = $(BUILD_DIR)/libemulator.a
 
