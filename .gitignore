@@ -1,0 +1,7 @@
+.cache
+build
+
+# Compiled object files
+*.o
+*.a
+compile_commands.json
