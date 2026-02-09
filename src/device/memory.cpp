@@ -1,4 +1,4 @@
-#include "emulator/device.h"
+#include "emulator/device/memory.h"
 
 #include <fstream>
 
@@ -19,7 +19,7 @@ bool IsAccessValid(const std::vector<uint8_t>& storage, const MemAccess& access)
 
 MemResponse MakeFault(const MemAccess& access) {
     MemResponse response;
-    response.Result = CpuResult::Error;
+    response.Success = false;
     response.Error.Type = CpuErrorType::AccessFault;
     response.Error.Address = access.Address;
     response.Error.Size = access.Size;
@@ -82,7 +82,7 @@ MemResponse MemoryDevice::HandleRead(const MemAccess& access) {
         return MakeFault(access);
     }
     MemResponse response;
-    response.Result = CpuResult::Success;
+    response.Success = true;
     response.Data = ReadValue(Storage, access);
     return response;
 }
@@ -96,6 +96,6 @@ MemResponse MemoryDevice::HandleWrite(const MemAccess& access) {
     }
     WriteValue(&Storage, access);
     MemResponse response;
-    response.Result = CpuResult::Success;
+    response.Success = true;
     return response;
 }

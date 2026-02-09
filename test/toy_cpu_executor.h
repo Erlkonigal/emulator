@@ -3,11 +3,13 @@
 
 #include <cstdint>
 
-#include "emulator/cpu.h"
+#include "emulator/cpu/cpu.h"
 
 class ToyCpuExecutor;
 
 ToyCpuExecutor* GetLastToyCpu();
+
+class Debugger;
 
 class ToyCpuExecutor : public ICpuExecutor {
 public:
@@ -15,7 +17,7 @@ public:
     ~ToyCpuExecutor() override;
 
     void Reset() override;
-    CpuResult StepInstruction() override;
+    StepResult Step(uint64_t maxInstructions, uint64_t maxCycles) override;
 
     CpuErrorDetail GetLastError() const override;
 
@@ -26,17 +28,15 @@ public:
     uint64_t GetRegister(uint32_t regId) const override;
     void SetRegister(uint32_t regId, uint64_t value) override;
 
-    void SetMemoryBus(MemoryBus* bus) override;
-    void SetTraceSink(TraceSink* traceSink) override;
+    void SetDebugger(ICpuDebugger* debugger) override;
 
     uint32_t GetRegisterCount() const override;
 
 private:
-    CpuResult Fault(CpuErrorType type, uint64_t addr, uint32_t size);
+    bool Fault(CpuErrorType type, uint64_t addr, uint32_t size);
     uint32_t FetchU32(uint64_t pc, MemResponse* out);
 
-    MemoryBus* Bus = nullptr;
-    TraceSink* Trace = nullptr;
+    ICpuDebugger* Dbg = nullptr;
 
     static constexpr uint32_t kRegCount = 16;
     uint64_t Regs[kRegCount] = {};

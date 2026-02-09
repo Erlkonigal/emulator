@@ -1,4 +1,5 @@
-#include "emulator/app.h"
+#ifndef EMULATOR_APP_UTILS_H
+#define EMULATOR_APP_UTILS_H
 
 #include <cctype>
 #include <cerrno>
@@ -6,26 +7,27 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace {
-bool IsSpaceChar(char ch) {
+inline bool IsSpaceChar(char ch) {
     return std::isspace(static_cast<unsigned char>(ch)) != 0;
 }
 
-char ToLowerChar(char ch) {
+inline char ToLowerChar(char ch) {
     return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 }
 
-bool IsEmpty(const std::string& text) {
+inline bool IsEmpty(const std::string& text) {
     return text.empty();
 }
 
-bool IsHexDigitChar(char ch) {
+inline bool IsHexDigitChar(char ch) {
     return std::isxdigit(static_cast<unsigned char>(ch)) != 0;
 }
 } // namespace
 
-std::string ToLower(const std::string& text) {
+inline std::string ToLower(const std::string& text) {
     std::string out;
     out.reserve(text.size());
     for (char ch : text) {
@@ -34,7 +36,7 @@ std::string ToLower(const std::string& text) {
     return out;
 }
 
-void TrimInPlace(std::string* text) {
+inline void TrimInPlace(std::string* text) {
     if (text == nullptr || IsEmpty(*text)) {
         return;
     }
@@ -52,7 +54,7 @@ void TrimInPlace(std::string* text) {
     *text = text->substr(start, end - start);
 }
 
-void StripInlineComment(std::string* line) {
+inline void StripInlineComment(std::string* line) {
     if (line == nullptr) {
         return;
     }
@@ -62,7 +64,7 @@ void StripInlineComment(std::string* line) {
     }
 }
 
-bool ParseBool(const std::string& text, bool* value) {
+inline bool ParseBool(const std::string& text, bool* value) {
     if (value == nullptr) {
         return false;
     }
@@ -78,7 +80,7 @@ bool ParseBool(const std::string& text, bool* value) {
     return false;
 }
 
-bool ParseU64(const std::string& text, uint64_t* value) {
+inline bool ParseU64(const std::string& text, uint64_t* value) {
     if (value == nullptr) {
         return false;
     }
@@ -116,7 +118,7 @@ bool ParseU64(const std::string& text, uint64_t* value) {
     return true;
 }
 
-bool GetFileSize(const std::string& path, uint64_t* size) {
+inline bool GetFileSize(const std::string& path, uint64_t* size) {
     if (size == nullptr) {
         return false;
     }
@@ -132,7 +134,7 @@ bool GetFileSize(const std::string& path, uint64_t* size) {
     return true;
 }
 
-bool ComputeFramebufferSize(uint32_t width, uint32_t height, uint64_t* size) {
+inline bool ComputeFramebufferSize(uint32_t width, uint32_t height, uint64_t* size) {
     if (size == nullptr) {
         return false;
     }
@@ -150,7 +152,7 @@ bool ComputeFramebufferSize(uint32_t width, uint32_t height, uint64_t* size) {
     return true;
 }
 
-bool RequireArgValue(int argc, char** argv, int* index, const char* option, std::string* out,
+inline bool RequireArgValue(int argc, char** argv, int* index, const char* option, std::string* out,
     std::string* error) {
     if (index == nullptr || out == nullptr) {
         return false;
@@ -166,7 +168,7 @@ bool RequireArgValue(int argc, char** argv, int* index, const char* option, std:
     return true;
 }
 
-bool ParseU32Arg(const char* option, const std::string& text, uint32_t* out, std::string* error) {
+inline bool ParseU32Arg(const char* option, const std::string& text, uint32_t* out, std::string* error) {
     uint64_t parsed = 0;
     if (!ParseU64(text, &parsed) || parsed > std::numeric_limits<uint32_t>::max()) {
         if (error != nullptr) {
@@ -178,7 +180,7 @@ bool ParseU32Arg(const char* option, const std::string& text, uint32_t* out, std
     return true;
 }
 
-bool ParseU64Arg(const char* option, const std::string& text, uint64_t* out, std::string* error) {
+inline bool ParseU64Arg(const char* option, const std::string& text, uint64_t* out, std::string* error) {
     uint64_t parsed = 0;
     if (!ParseU64(text, &parsed)) {
         if (error != nullptr) {
@@ -189,3 +191,5 @@ bool ParseU64Arg(const char* option, const std::string& text, uint64_t* out, std
     *out = parsed;
     return true;
 }
+
+#endif // EMULATOR_APP_UTILS_H

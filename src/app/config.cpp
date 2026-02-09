@@ -1,4 +1,5 @@
-#include "emulator/app.h"
+#include "emulator/app/app.h"
+#include "emulator/app/utils.h"
 
 #include <fstream>
 #include <limits>
@@ -23,6 +24,52 @@ bool ApplyConfigValue(EmulatorConfig* config, const std::string& key, const std:
             return false;
         }
         config->Debug = flag;
+        return true;
+    }
+    if (key == "itrace") {
+        bool flag = false;
+        if (!ParseBool(value, &flag)) {
+            if (error != nullptr) *error = "Invalid itrace value: " + value;
+            return false;
+        }
+        config->ITrace = flag;
+        return true;
+    }
+    if (key == "mtrace") {
+        bool flag = false;
+        if (!ParseBool(value, &flag)) {
+            if (error != nullptr) *error = "Invalid mtrace value: " + value;
+            return false;
+        }
+        config->MTrace = flag;
+        return true;
+    }
+    if (key == "bptrace") {
+        bool flag = false;
+        if (!ParseBool(value, &flag)) {
+            if (error != nullptr) *error = "Invalid bptrace value: " + value;
+            return false;
+        }
+        config->BPTrace = flag;
+        return true;
+    }
+    if (key == "log_level") {
+        config->LogLevel = value;
+        return true;
+    }
+    if (key == "log_filename") {
+        config->LogFilename = value;
+        return true;
+    }
+    if (key == "enable_log") {
+        bool flag = false;
+        if (!ParseBool(value, &flag)) {
+            if (error != nullptr) {
+                *error = "Invalid enable_log value: " + value;
+            }
+            return false;
+        }
+        config->EnableLog = flag;
         return true;
     }
     if (key == "width") {
@@ -104,6 +151,17 @@ bool ApplyConfigValue(EmulatorConfig* config, const std::string& key, const std:
     }
     if (key == "title") {
         config->WindowTitle = value;
+        return true;
+    }
+    if (key == "cpu_frequency") {
+        uint64_t parsed = 0;
+        if (!ParseU64(value, &parsed) || parsed > std::numeric_limits<uint32_t>::max()) {
+            if (error != nullptr) {
+                *error = "Invalid cpu_frequency value: " + value;
+            }
+            return false;
+        }
+        config->CpuFrequency = static_cast<uint32_t>(parsed);
         return true;
     }
     if (error != nullptr) {

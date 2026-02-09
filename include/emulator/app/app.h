@@ -1,15 +1,13 @@
 #ifndef EMULATOR_APP_APP_H
 #define EMULATOR_APP_APP_H
 
-#include <atomic>
-#include <condition_variable>
 #include <cstdint>
-#include <mutex>
 #include <string>
 #include <vector>
 
-#include "emulator/bus.h"
-#include "emulator/cpu.h"
+#include "emulator/bus/bus.h"
+#include "emulator/cpu/cpu.h"
+#include "emulator/debugger/debugger.h"
 
 constexpr uint64_t kDefaultRomBase = 0x00000000;
 constexpr uint64_t kDefaultRamBase = 0x80000000;
@@ -36,8 +34,17 @@ struct EmulatorConfig {
     uint64_t SdlBase = kDefaultSdlBase;
     uint32_t Width = kDefaultWidth;
     uint32_t Height = kDefaultHeight;
+    uint32_t CpuFrequency = 1000000;
     bool Debug = false;
     bool ShowHelp = false;
+
+    // Trace & Logging
+    bool ITrace = false;
+    bool MTrace = false;
+    bool BPTrace = false;
+    std::string LogLevel = "info";
+    std::string LogFilename = "";
+    bool EnableLog = false;
 };
 
 bool LoadConfigFile(const std::string& path, bool required, EmulatorConfig* config,
@@ -48,43 +55,13 @@ bool FindConfigPath(int argc, char** argv, EmulatorConfig* config, bool* require
     std::string* error);
 bool ParseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error);
 
-bool GetFileSize(const std::string& path, uint64_t* size);
-bool ComputeFramebufferSize(uint32_t width, uint32_t height, uint64_t* size);
 bool ValidateMappings(const std::vector<MemoryRegion>& mappings, std::string* error);
-
-void TrimInPlace(std::string* text);
-void StripInlineComment(std::string* line);
-std::string ToLower(const std::string& text);
-bool ParseU64(const std::string& text, uint64_t* value);
-bool ParseBool(const std::string& text, bool* value);
-bool RequireArgValue(int argc, char** argv, int* index, const char* option, std::string* out,
-    std::string* error);
-bool ParseU32Arg(const char* option, const std::string& text, uint32_t* out, std::string* error);
-bool ParseU64Arg(const char* option, const std::string& text, uint64_t* out, std::string* error);
 
 class ICpuExecutor;
 class TimerDevice;
 class SdlDisplayDevice;
 class MemoryBus;
 class UartDevice;
-
-struct CpuControl {
-    std::mutex Mutex;
-    std::condition_variable Cv;
-};
-
-struct EmulatorRunState {
-    std::atomic<CpuState> State{CpuState::Start};
-    std::atomic<uint32_t> StepsPending{0};
-};
-
-
-void PumpTerminalInput(UartDevice* uart);
-void RunCpuThread(ICpuExecutor* cpu, TimerDevice* timer, EmulatorRunState* state,
-    CpuControl* control);
-void RunSdlThread(SdlDisplayDevice* sdl, EmulatorRunState* state, CpuControl* control);
-void RunDebugger(ICpuExecutor* cpu, MemoryBus* bus, UartDevice* uart, EmulatorRunState* state,
-    CpuControl* control);
 
 int RunEmulator(int argc, char** argv);
 

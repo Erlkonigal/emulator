@@ -62,15 +62,19 @@ void PrintReport();
 
 #define EXPECT_TRUE(expr) \
     do { \
-        if (!(expr)) { \
-            ::testfw::AddFailure(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": EXPECT_TRUE failed: " #expr); \
+        auto _v = (expr); \
+        if (!(_v)) { \
+            ::testfw::AddFailure(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": EXPECT_TRUE failed: " #expr \
+                " (expected=true actual=" + ::testfw::ToString(_v) + ")"); \
         } \
     } while (0)
 
 #define ASSERT_TRUE(expr) \
     do { \
-        if (!(expr)) { \
-            ::testfw::AddFailure(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": ASSERT_TRUE failed: " #expr); \
+        auto _v = (expr); \
+        if (!(_v)) { \
+            ::testfw::AddFailure(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": ASSERT_TRUE failed: " #expr \
+                " (expected=true actual=" + ::testfw::ToString(_v) + ")"); \
             return; \
         } \
     } while (0)

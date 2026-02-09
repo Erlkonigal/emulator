@@ -12,8 +12,8 @@ enum class Op : uint8_t {
     Ori = 0x02,
     Lw = 0x03,
     Sw = 0x04,
+    Beq = 0x05,
     Halt = 0x7f,
-    SleepMs = 0x80,
 };
 
 inline uint32_t EncodeRImm16(Op op, uint8_t rd, uint16_t imm) {
@@ -27,6 +27,10 @@ inline uint32_t EncodeMem(Op op, uint8_t r0, uint8_t r1, int8_t off) {
     // For LW: load [r1+off] -> r0
     return (static_cast<uint32_t>(op) << 24) | (static_cast<uint32_t>(r0) << 16) |
         (static_cast<uint32_t>(r1) << 8) | static_cast<uint8_t>(off);
+}
+
+inline uint32_t EncodeBranch(Op op, uint8_t r0, uint8_t r1, int8_t off) {
+    return EncodeMem(op, r0, r1, off);
 }
 
 inline uint32_t Nop() {
@@ -53,8 +57,8 @@ inline uint32_t Sw(uint8_t rs, uint8_t rd, int8_t off) {
     return EncodeMem(Op::Sw, rs, rd, off);
 }
 
-inline uint32_t SleepMs(uint16_t ms) {
-    return EncodeRImm16(Op::SleepMs, 0, ms);
+inline uint32_t Beq(uint8_t r0, uint8_t r1, int8_t off) {
+    return EncodeBranch(Op::Beq, r0, r1, off);
 }
 
 inline void Emit(std::vector<uint32_t>* prog, uint32_t inst) {

@@ -1,4 +1,6 @@
 .cache
+.vscode
+.clangd
 build
 
 # Compiled object files

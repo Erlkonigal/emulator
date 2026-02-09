@@ -1,4 +1,5 @@
-#include "emulator/app.h"
+#include "emulator/app/app.h"
+#include "emulator/app/utils.h"
 
 #include <cstdio>
 #include <limits>
@@ -20,7 +21,13 @@ void PrintUsage(const char* exe) {
         "  --uart-base <addr> UART base address (default: 0x20000000)\n"
         "  --timer-base <addr> TIMER base address (default: 0x20001000)\n"
         "  --title <string> Window title (default: Emulator)\n"
-        "  --help, -h        Show this help\n",
+        "  --itrace          Enable Instruction Trace\n"
+        "  --mtrace          Enable Memory Trace\n"
+        "  --bptrace         Enable Branch Prediction Trace\n"
+        "  --log-level <lvl>     Set log level (trace, debug, info, warn, error)\n"
+        "  --log-filename <path> Set log file path (device->name.out, other->name.err)\n"
+        "  --enable-log          Enable separate logging (splits device/other output)\n"
+        "  --help, -h            Show this help\n",
         name);
 }
 
@@ -155,6 +162,38 @@ bool ParseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error
                 return false;
             }
             config->WindowTitle = value;
+            continue;
+        }
+        if (arg == "--itrace") {
+            config->ITrace = true;
+            continue;
+        }
+        if (arg == "--mtrace") {
+            config->MTrace = true;
+            continue;
+        }
+        if (arg == "--bptrace") {
+            config->BPTrace = true;
+            continue;
+        }
+        if (arg == "--log-level") {
+            std::string value;
+            if (!RequireArgValue(argc, argv, &i, "--log-level", &value, error)) {
+                return false;
+            }
+            config->LogLevel = value;
+            continue;
+        }
+        if (arg == "--log-filename") {
+            std::string value;
+            if (!RequireArgValue(argc, argv, &i, "--log-filename", &value, error)) {
+                return false;
+            }
+            config->LogFilename = value;
+            continue;
+        }
+        if (arg == "--enable-log") {
+            config->EnableLog = true;
             continue;
         }
         if (!arg.empty() && arg[0] == '-') {

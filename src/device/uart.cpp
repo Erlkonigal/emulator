@@ -1,4 +1,5 @@
-#include "emulator/device.h"
+#include "emulator/device/uart.h"
+#include "emulator/logging/logging.h"
 
 #include <cstdio>
 #include <string>
@@ -11,6 +12,7 @@ constexpr uint32_t kUartStatusRxReady = 1u << 0;
 constexpr uint32_t kUartStatusTxReady = 1u << 1;
 constexpr uint32_t kUartRegSize = 4;
 constexpr size_t kUartFlushThreshold = 256;
+constexpr uint32_t kUartFlushIdleThreshold = 10000;
 
 bool IsValidAccess(const MemAccess& access) {
     return access.Size == kUartRegSize;
@@ -22,7 +24,7 @@ uint8_t ExtractByte(uint64_t value) {
 
 MemResponse MakeFault(uint64_t address, uint32_t size) {
     MemResponse response;
-    response.Result = CpuResult::Error;
+    response.Success = false;
     response.Error.Type = CpuErrorType::AccessFault;
     response.Error.Address = address;
     response.Error.Size = size;
@@ -34,6 +36,7 @@ UartDevice::UartDevice() {
     SetType(DeviceType::Uart);
     SetReadHandler([this](const MemAccess& access) { return HandleRead(access); });
     SetWriteHandler([this](const MemAccess& access) { return HandleWrite(access); });
+    SetTickHandler([this](uint64_t cycles) { HandleTick(cycles); });
 }
 
 UartDevice::~UartDevice() {
@@ -51,6 +54,11 @@ void UartDevice::SetTxHandler(TxHandler handler) {
     TxCallback = std::move(handler);
 }
 
+void UartDevice::Flush() {
+    std::lock_guard<std::mutex> lock(Mutex);
+    FlushTxLocked();
+}
+
 uint32_t UartDevice::GetStatus() const {
     std::lock_guard<std::mutex> lock(Mutex);
     uint32_t status = kUartStatusTxReady;
@@ -66,13 +74,13 @@ MemResponse UartDevice::HandleRead(const MemAccess& access) {
     }
     if (access.Address == kUartStatusOffset) {
         MemResponse response;
-        response.Result = CpuResult::Success;
+        response.Success = true;
         response.Data = GetStatus();
         return response;
     }
     if (access.Address == kUartDataOffset) {
         MemResponse response;
-        response.Result = CpuResult::Success;
+        response.Success = true;
         std::lock_guard<std::mutex> lock(Mutex);
         if (RxBuffer.empty()) {
             response.Data = 0;
@@ -93,14 +101,28 @@ MemResponse UartDevice::HandleWrite(const MemAccess& access) {
         uint8_t ch = ExtractByte(access.Data);
         std::lock_guard<std::mutex> lock(Mutex);
         TxBuffer.push_back(static_cast<char>(ch));
+        IdleCycles = 0;
         if (TxBuffer.size() >= kUartFlushThreshold) {
             FlushTxLocked();
         }
         MemResponse response;
-        response.Result = CpuResult::Success;
+        response.Success = true;
         return response;
     }
     return MakeFault(access.Address, access.Size);
+}
+
+void UartDevice::HandleTick(uint64_t cycles) {
+    std::lock_guard<std::mutex> lock(Mutex);
+    if (TxBuffer.empty()) {
+        IdleCycles = 0;
+        return;
+    }
+    IdleCycles += cycles;
+    if (IdleCycles >= kUartFlushIdleThreshold) {
+        FlushTxLocked();
+        IdleCycles = 0;
+    }
 }
 
 void UartDevice::FlushTxLocked() {
@@ -110,8 +132,7 @@ void UartDevice::FlushTxLocked() {
     if (TxCallback) {
         TxCallback(TxBuffer);
     } else {
-        std::fwrite(TxBuffer.data(), 1, TxBuffer.size(), stdout);
-        std::fflush(stdout);
+        LogDevicePrint("%s", TxBuffer.c_str());
     }
     TxBuffer.clear();
 }

@@ -1,4 +1,4 @@
-#include "emulator/device.h"
+#include "emulator/device/device.h"
 
 Device::Device() = default;
 
@@ -7,7 +7,7 @@ MemResponse Device::Read(const MemAccess& access) {
         return ReadCallback(access);
     }
     MemResponse response;
-    response.Result = CpuResult::Error;
+    response.Success = false;
     response.Error.Type = CpuErrorType::DeviceFault;
     response.Error.Address = access.Address;
     response.Error.Size = access.Size;
@@ -19,17 +19,29 @@ MemResponse Device::Write(const MemAccess& access) {
         return WriteCallback(access);
     }
     MemResponse response;
-    response.Result = CpuResult::Error;
+    response.Success = false;
     response.Error.Type = CpuErrorType::DeviceFault;
     response.Error.Address = access.Address;
     response.Error.Size = access.Size;
     return response;
 }
 
-void Device::Tick(uint32_t cycles) {
+void Device::Tick(uint64_t cycles) {
     if (TickCallback) {
         TickCallback(cycles);
     }
+}
+
+void Device::Sync(uint64_t currentCycle) {
+    if (currentCycle <= LastSyncCycle) {
+        return;
+    }
+    uint64_t delta = currentCycle - LastSyncCycle;
+    if (delta < SyncThreshold) {
+        return;
+    }
+    Tick(delta);
+    LastSyncCycle = currentCycle;
 }
 
 DeviceType Device::GetType() const {
@@ -50,4 +62,8 @@ void Device::SetTickHandler(TickHandler handler) {
 
 void Device::SetType(DeviceType type) {
     Type = type;
+}
+
+void Device::SetSyncThreshold(uint64_t threshold) {
+    SyncThreshold = threshold;
 }

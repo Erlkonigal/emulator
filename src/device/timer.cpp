@@ -1,4 +1,4 @@
-#include "emulator/device.h"
+#include "emulator/device/timer.h"
 
 
 namespace {
@@ -6,7 +6,7 @@ constexpr uint64_t kTimerLowOffset = 0x0;
 constexpr uint64_t kTimerHighOffset = 0x4;
 constexpr uint64_t kTimerCtrlOffset = 0x8;
 constexpr uint32_t kTimerRegSize = 4;
-constexpr uint32_t kTickBatchCycles = 1000;
+// kTickBatchCycles no longer used as we don't batch system calls
 
 bool IsValidAccess(const MemAccess& access) {
     return access.Size == kTimerRegSize;
@@ -14,7 +14,7 @@ bool IsValidAccess(const MemAccess& access) {
 
 MemResponse MakeFault(const MemAccess& access) {
     MemResponse response;
-    response.Result = CpuResult::Error;
+    response.Success = false;
     response.Error.Type = CpuErrorType::AccessFault;
     response.Error.Address = access.Address;
     response.Error.Size = access.Size;
@@ -25,32 +25,18 @@ MemResponse MakeFault(const MemAccess& access) {
 
 TimerDevice::TimerDevice() {
     SetType(DeviceType::Timer);
-    LastTick = std::chrono::steady_clock::now();
     SetReadHandler([this](const MemAccess& access) { return HandleRead(access); });
     SetWriteHandler([this](const MemAccess& access) { return HandleWrite(access); });
-    SetTickHandler([this](uint32_t cycles) { HandleTick(cycles); });
+    SetTickHandler([this](uint64_t cycles) { HandleTick(cycles); });
 }
 
 uint64_t TimerDevice::GetCounterMicros() {
-    auto now = std::chrono::steady_clock::now();
-    auto delta = std::chrono::duration_cast<std::chrono::microseconds>(now - LastTick).count();
-    LastTick = now;
-    if (delta > 0) {
-        AccumulatedMicros += static_cast<uint64_t>(delta);
-    }
     return AccumulatedMicros;
 }
 
-void TimerDevice::AccumulateCycles(uint32_t cycles) {
-    uint32_t total = PendingCycles + cycles;
-    PendingCycles = total % kTickBatchCycles;
-    if (total >= kTickBatchCycles) {
-        GetCounterMicros();
-    }
-}
-
-void TimerDevice::HandleTick(uint32_t cycles) {
-    AccumulateCycles(cycles);
+void TimerDevice::HandleTick(uint64_t cycles) {
+    // Assume 1MHz, so 1 cycle = 1 microsecond.
+    AccumulatedMicros += cycles;
 }
 
 MemResponse TimerDevice::HandleRead(const MemAccess& access) {
@@ -62,7 +48,7 @@ MemResponse TimerDevice::HandleRead(const MemAccess& access) {
     }
     uint64_t counter = GetCounterMicros();
     MemResponse response;
-    response.Result = CpuResult::Success;
+    response.Success = true;
     response.Data = (access.Address == kTimerLowOffset)
         ? static_cast<uint32_t>(counter & 0xffffffffu)
         : static_cast<uint32_t>((counter >> 32) & 0xffffffffu);
@@ -75,10 +61,8 @@ MemResponse TimerDevice::HandleWrite(const MemAccess& access) {
     }
     if (access.Address == kTimerCtrlOffset) {
         AccumulatedMicros = 0;
-        LastTick = std::chrono::steady_clock::now();
-        PendingCycles = 0;
         MemResponse response;
-        response.Result = CpuResult::Success;
+        response.Success = true;
         return response;
     }
     return MakeFault(access);

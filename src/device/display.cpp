@@ -1,4 +1,4 @@
-#include "emulator/device.h"
+#include "emulator/device/display.h"
 
 #include <cstring>
 
@@ -13,6 +13,7 @@ struct SdlDisplayDevice::SdlDisplayState {
     uint32_t Height = 0;
     uint8_t* FrameBuffer = nullptr;
     bool Ready = false;
+    bool Headless = false;
 };
 
 namespace {
@@ -72,6 +73,22 @@ bool SdlDisplayDevice::Init(uint32_t width, uint32_t height, const char* title) 
     State->FrameBuffer = new uint8_t[static_cast<size_t>(width) * height * 4];
     std::memset(State->FrameBuffer, 0, static_cast<size_t>(width) * height * 4);
     State->Ready = true;
+    State->Headless = false;
+    Dirty.store(true, std::memory_order_release);
+    return true;
+}
+
+bool SdlDisplayDevice::InitHeadless(uint32_t width, uint32_t height) {
+    if (State == nullptr || width == 0 || height == 0) {
+        return false;
+    }
+    Shutdown();
+    State->Width = width;
+    State->Height = height;
+    State->FrameBuffer = new uint8_t[static_cast<size_t>(width) * height * 4];
+    std::memset(State->FrameBuffer, 0, static_cast<size_t>(width) * height * 4);
+    State->Ready = true;
+    State->Headless = true;
     Dirty.store(true, std::memory_order_release);
     return true;
 }
@@ -80,6 +97,7 @@ void SdlDisplayDevice::Shutdown() {
     if (State == nullptr) {
         return;
     }
+    State->Headless = false;
     delete[] State->FrameBuffer;
     State->FrameBuffer = nullptr;
     if (State->Texture != nullptr) {
@@ -107,6 +125,9 @@ bool SdlDisplayDevice::IsReady() const {
 
 void SdlDisplayDevice::PollEvents(uint32_t timeoutMs) {
     if (State == nullptr || !State->Ready) {
+        return;
+    }
+    if (State->Headless) {
         return;
     }
     SDL_Event event;
@@ -137,6 +158,12 @@ void SdlDisplayDevice::PollEvents(uint32_t timeoutMs) {
 bool SdlDisplayDevice::IsQuitRequested() const {
     std::lock_guard<std::mutex> lock(InputMutex);
     return QuitRequested;
+}
+
+void SdlDisplayDevice::PushKey(uint32_t key) {
+    std::lock_guard<std::mutex> lock(InputMutex);
+    LastKey = key;
+    KeyQueue.push_back(key);
 }
 
 uint32_t SdlDisplayDevice::GetWidth() const {
@@ -178,6 +205,10 @@ void SdlDisplayDevice::Present() {
     if (State == nullptr || !State->Ready) {
         return;
     }
+    if (State->Headless) {
+        Dirty.store(false, std::memory_order_release);
+        return;
+    }
     std::lock_guard<std::mutex> lock(FrameMutex);
     SDL_UpdateTexture(State->Texture, nullptr, State->FrameBuffer,
         static_cast<int>(State->Width) * 4);
@@ -187,7 +218,11 @@ void SdlDisplayDevice::Present() {
     Dirty.store(false, std::memory_order_release);
 }
 
-bool SdlDisplayDevice::ReadRegister(uint64_t offset, uint64_t* value) const {
+uint32_t SdlDisplayDevice::GetUpdateFrequency() const {
+    return 60;
+}
+
+bool SdlDisplayDevice::ReadRegister(uint64_t offset, uint64_t* value) {
     if (value == nullptr) {
         return false;
     }
@@ -257,7 +292,7 @@ bool SdlDisplayDevice::WriteRegister(uint64_t offset, uint64_t value) {
 MemResponse SdlDisplayDevice::HandleRead(const MemAccess& access) {
     MemResponse response;
     if (State == nullptr || access.Size == 0 || access.Size > sizeof(uint64_t)) {
-        response.Result = CpuResult::Error;
+        response.Success = false;
         response.Error.Type = CpuErrorType::AccessFault;
         response.Error.Address = access.Address;
         response.Error.Size = access.Size;
@@ -265,7 +300,7 @@ MemResponse SdlDisplayDevice::HandleRead(const MemAccess& access) {
     }
     uint64_t mappedSize = GetMappedSize();
     if (access.Address >= mappedSize || access.Address > mappedSize - access.Size) {
-        response.Result = CpuResult::Error;
+        response.Success = false;
         response.Error.Type = CpuErrorType::AccessFault;
         response.Error.Address = access.Address;
         response.Error.Size = access.Size;
@@ -274,13 +309,13 @@ MemResponse SdlDisplayDevice::HandleRead(const MemAccess& access) {
     if (access.Address < kFrameBufferOffset) {
         uint64_t value = 0;
         if (!ReadRegister(access.Address, &value)) {
-            response.Result = CpuResult::Error;
+            response.Success = false;
             response.Error.Type = CpuErrorType::AccessFault;
             response.Error.Address = access.Address;
             response.Error.Size = access.Size;
             return response;
         }
-        response.Result = CpuResult::Success;
+        response.Success = true;
         response.Data = value;
         return response;
     }
@@ -291,7 +326,7 @@ MemResponse SdlDisplayDevice::HandleRead(const MemAccess& access) {
         value |= static_cast<uint64_t>(State->FrameBuffer[static_cast<size_t>(fbOffset + i)])
             << (8 * i);
     }
-    response.Result = CpuResult::Success;
+    response.Success = true;
     response.Data = value;
     return response;
 }
@@ -299,7 +334,7 @@ MemResponse SdlDisplayDevice::HandleRead(const MemAccess& access) {
 MemResponse SdlDisplayDevice::HandleWrite(const MemAccess& access) {
     MemResponse response;
     if (State == nullptr || access.Size == 0 || access.Size > sizeof(uint64_t)) {
-        response.Result = CpuResult::Error;
+        response.Success = false;
         response.Error.Type = CpuErrorType::AccessFault;
         response.Error.Address = access.Address;
         response.Error.Size = access.Size;
@@ -307,7 +342,7 @@ MemResponse SdlDisplayDevice::HandleWrite(const MemAccess& access) {
     }
     uint64_t mappedSize = GetMappedSize();
     if (access.Address >= mappedSize || access.Address > mappedSize - access.Size) {
-        response.Result = CpuResult::Error;
+        response.Success = false;
         response.Error.Type = CpuErrorType::AccessFault;
         response.Error.Address = access.Address;
         response.Error.Size = access.Size;
@@ -315,13 +350,13 @@ MemResponse SdlDisplayDevice::HandleWrite(const MemAccess& access) {
     }
     if (access.Address < kFrameBufferOffset) {
         if (!WriteRegister(access.Address, access.Data)) {
-            response.Result = CpuResult::Error;
+            response.Success = false;
             response.Error.Type = CpuErrorType::AccessFault;
             response.Error.Address = access.Address;
             response.Error.Size = access.Size;
             return response;
         }
-        response.Result = CpuResult::Success;
+        response.Success = true;
         return response;
     }
     uint64_t fbOffset = access.Address - kFrameBufferOffset;
@@ -333,6 +368,6 @@ MemResponse SdlDisplayDevice::HandleWrite(const MemAccess& access) {
         value >>= 8;
     }
     Dirty.store(true, std::memory_order_release);
-    response.Result = CpuResult::Success;
+    response.Success = true;
     return response;
 }
