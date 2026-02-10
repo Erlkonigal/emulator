@@ -37,7 +37,6 @@ public:
 
     MemResponse busRead(const MemAccess& access) override;
     MemResponse busWrite(const MemAccess& access) override;
-    uint64_t getCpuCycle();
 
     std::vector<uint8_t> scanMemory(uint64_t address, uint32_t length);
     std::vector<uint64_t> readRegisters();
@@ -100,13 +99,12 @@ private:
     void updateStatusDisplay();
 
     std::unique_ptr<Terminal> mTerminal;
-    std::atomic<uint64_t> mTotalInstructions{0};
+    uint64_t mTotalInstructions = 0;
     bool mLastCommandSuccess = true;
 
     TraceOptions mTraceOptions;
     TraceFormatter mTraceFormatter;
 
-    std::atomic<double> mCurrentCPS{0.0};
     std::chrono::steady_clock::time_point mLastCpsTime;
     uint64_t mLastCpsCycles = 0;
 };

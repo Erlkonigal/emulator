@@ -205,13 +205,6 @@ MemResponse Debugger::busWrite(const MemAccess& access) {
     return response;
 }
 
-uint64_t Debugger::getCpuCycle() {
-    if (mCpu) {
-        return mCpu->getCycle();
-    }
-    return 0;
-}
-
 void Debugger::setSdl(SdlDisplayDevice* sdl) {
     mSdl = sdl;
 }
@@ -302,10 +295,6 @@ void Debugger::cpuThreadLoop() {
         return;
     }
 
-    auto lastUpdate = std::chrono::steady_clock::now();
-    mLastCpsTime = lastUpdate;
-    mLastCpsCycles = mCpu->getCycle();
-
     while (!mState.shouldExit.load(std::memory_order_acquire)) {
         uint32_t steps = 0;
         bool stepping = false;
@@ -334,50 +323,33 @@ void Debugger::cpuThreadLoop() {
                 steps = kInstructionsPerBatch;
             }
         }
-            if (steps == 0) {
-                continue;
+        if (steps == 0) {
+            continue;
+        }
+
+        StepResult result = mCpu->step(steps, mSyncThresholdCycles);
+
+        mTotalInstructions += result.instructionsExecuted;
+
+        if (!result.success) {
+            mState.state.store(CpuState::Halted, std::memory_order_release);
+            mControl.cv.notify_all();
+            LOG_INFO("CPU Halted at 0x%llx", (unsigned long long)mCpu->getPc());
+            if (mCpu->getLastError().type != CpuErrorType::None) {
+                LOG_ERROR("Last error: Type=%d Addr=0x%llx Size=%u",
+                            static_cast<int>(mCpu->getLastError().type),
+                            (unsigned long long)mCpu->getLastError().address,
+                            mCpu->getLastError().size);
             }
+        }
 
-            StepResult result = mCpu->step(steps, mSyncThresholdCycles);
+        mBus->syncAll(mCpu->getCycle());
 
-            mTotalInstructions += result.instructionsExecuted;
-
-            if (!result.success) {
-                mState.state.store(CpuState::Halted, std::memory_order_release);
-                mControl.cv.notify_all();
-                LOG_INFO("CPU Halted at 0x%llx", (unsigned long long)mCpu->getPc());
-                if (mCpu->getLastError().type != CpuErrorType::None) {
-                    LOG_ERROR("Last error: Type=%d Addr=0x%llx Size=%u",
-                             static_cast<int>(mCpu->getLastError().type),
-                             (unsigned long long)mCpu->getLastError().address,
-                             mCpu->getLastError().size);
-                }
-            }
-
-            mBus->syncAll(mCpu->getCycle());
-
-            if (stepping && !mState.shouldExit.load(std::memory_order_acquire)) {
-                mState.state.store(CpuState::Pause, std::memory_order_release);
-            }
-
-            if (stepping || !result.success) {
-                updateStatusDisplay();
-            } else {
-                auto now = std::chrono::steady_clock::now();
-
-                if (now - lastUpdate > std::chrono::milliseconds(30)) {
-                       double dt = std::chrono::duration<double>(now - lastUpdate).count();
-                       uint64_t currentCycles = mCpu->getCycle();
-                       if (dt > 0) {
-                           double dCycles = static_cast<double>(currentCycles - mLastCpsCycles);
-                           mCurrentCPS.store(dCycles / dt, std::memory_order_release);
-                       }
-                       mLastCpsCycles = currentCycles;
-
-                       updateStatusDisplay();
-                       lastUpdate = now;
-                }
-            }
+        if (stepping && !mState.shouldExit.load(std::memory_order_acquire)) {
+            mState.state.store(CpuState::Pause, std::memory_order_release);
+        }
+        
+        updateStatusDisplay();
     }
 }
 
@@ -435,7 +407,6 @@ void Debugger::runPlainInputLoop() {
 
     while (!mState.shouldExit.load(std::memory_order_acquire)) {
         if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
-            LOG_INFO("CPU halted, exiting input loop");
             break;
         }
 
@@ -466,11 +437,6 @@ void Debugger::runPlainInputLoop() {
                     continue;
                 }
                 LOG_ERROR("Read failed: %s", strerror(errno));
-                break;
-            }
-
-            if (bytesRead == 0) {
-                LOG_INFO("EOF received, exiting input loop");
                 break;
             }
 
@@ -766,8 +732,8 @@ void Debugger::updateStatusDisplay() {
         case CpuState::Halted:  stateStr = "HALTED "; break;
     }
 
-    uint64_t cycles = getCpuCycle();
-    uint64_t instrs = mTotalInstructions.load(std::memory_order_acquire);
+    uint64_t cycles = mCpu ? mCpu->getCycle() : 0;
+    uint64_t instrs = mTotalInstructions;
     uint64_t pc = mCpu ? mCpu->getPc() : 0;
 
     char buffer[256];
@@ -777,7 +743,15 @@ void Debugger::updateStatusDisplay() {
         ipc = static_cast<double>(instrs) / static_cast<double>(cycles);
     }
 
-    double cps = mCurrentCPS.load(std::memory_order_acquire);
+    double cps = 0;
+    auto now = std::chrono::steady_clock::now();
+    double dt = std::chrono::duration<double>(now - mLastCpsTime).count();
+    if (dt > 0) {
+        double dCycles = static_cast<double>(cycles - mLastCpsCycles);
+        cps = dCycles / dt;
+    }
+    mLastCpsTime = now;
+    mLastCpsCycles = cycles;
 
     char cpsBuf[32];
     if (cps >= 1000000.0) {
