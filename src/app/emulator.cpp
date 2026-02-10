@@ -168,5 +168,5 @@ int RunEmulator(int argc, char** argv) {
 
     debugger.run(config.debug);
 
-    return 0;
+    return !(cpu->getLastError().type == CpuErrorType::None);
 }
