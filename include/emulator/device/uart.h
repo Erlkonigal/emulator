@@ -15,22 +15,22 @@ public:
     UartDevice();
     ~UartDevice();
 
-    void PushRx(uint8_t ch);
-    void SetTxHandler(TxHandler handler);
-    void Flush();
+    void pushRx(uint8_t ch);
+    void setTxHandler(TxHandler handler);
+    void flush();
 
 private:
-    std::deque<uint8_t> RxBuffer;
-    std::string TxBuffer;
-    mutable std::mutex Mutex;
-    TxHandler TxCallback;
-    uint64_t IdleCycles = 0;
+    std::deque<uint8_t> mRxBuffer;
+    std::string mTxBuffer;
+    mutable std::mutex mMutex;
+    TxHandler mTxCallback;
+    uint64_t mIdleCycles = 0;
 
-    uint32_t GetStatus() const;
-    void FlushTxLocked();
-    void HandleTick(uint64_t cycles);
-    MemResponse HandleRead(const MemAccess& access);
-    MemResponse HandleWrite(const MemAccess& access);
+    uint32_t getStatus() const;
+    void flushTxLocked();
+    void handleTick(uint64_t cycles);
+    MemResponse handleRead(const MemAccess& access);
+    MemResponse handleWrite(const MemAccess& access);
 };
 
 #endif

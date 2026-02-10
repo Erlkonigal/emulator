@@ -17,47 +17,46 @@ public:
     Terminal();
     ~Terminal();
 
-    void PrintLog(const char* level, const char* msg);
-    void PrintChar(uint8_t ch);
-    void UpdateStatus(const std::string& status);
-    void UpdateLastCommandSuccess(bool success);
+    void printLog(const char* msg);
+    void printChar(uint8_t ch);
+    void updateStatus(const std::string& status);
 
     using OnCommandCallback = std::function<void(const std::string&)>;
-    void SetOnCommand(OnCommandCallback cb) { on_command_ = cb; }
+    void setOnCommand(OnCommandCallback cb) { mOnCommand = cb; }
 
-    VTermManager& GetVTermManager() { return vterm_mgr_; }
-    FocusPanel GetFocus() const { return focus_; }
-    void SwitchFocus();
+    VTermManager& getVTermManager() { return mVTermManager; }
+    FocusPanel getFocus() const { return mFocus; }
+    void switchFocus();
 
-    void HandleMouse(int y, int x);
-    void RunInputLoop();
-    void Stop() { m_ShouldClose = true; }
-    void SetOnInput(std::function<void(const std::string&)> callback) { on_input_ = callback; }
+    void handleMouse(int y, int x);
+    void runInputLoop();
+    void stop() { mShouldClose = true; }
+    void setOnInput(std::function<void(const std::string&)> callback) { mOnInput = callback; }
 
 private:
-    void RenderAll();
-    void ProcessDebugInput(int ch);
-    void SetupWindows();
-    void HandleResize();
+    void renderAll();
+    void processDebugInput(int ch);
+    void setupWindows();
+    void handleResize();
 
-    std::mutex m_Mutex;
+    std::mutex mMutex;
 
-    WINDOW* status_win_ = nullptr;
-    WINDOW* vterm_border_ = nullptr;
-    WINDOW* debug_win_ = nullptr;
+    WINDOW* mStatusWin = nullptr;
+    WINDOW* mVtermBorder = nullptr;
+    WINDOW* mDebugWin = nullptr;
 
-    VTermManager vterm_mgr_;
-    FocusPanel focus_ = FocusPanel::VTERM;
+    VTermManager mVTermManager;
+    FocusPanel mFocus = FocusPanel::VTERM;
 
-    std::string m_CurrentStatus;
-    bool m_LastCmdSuccess = true;
+    std::string mCurrentStatus;
+    bool mLastCmdSuccess = true;
 
-    std::string m_DebugInput;
-    int m_DebugCursorPos = 0;
-    int m_Height = 0;
+    std::string mDebugInput;
+    int mDebugCursorPos = 0;
+    int mHeight = 0;
 
-    OnCommandCallback on_command_;
-    std::atomic<bool> m_ShouldClose{false};
+    OnCommandCallback mOnCommand;
+    std::atomic<bool> mShouldClose{false};
     
-    std::function<void(const std::string&)> on_input_;
+    std::function<void(const std::string&)> mOnInput;
 };

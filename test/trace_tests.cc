@@ -23,17 +23,17 @@ struct TraceTestContext {
 
     explicit TraceTestContext(const std::string& logFile) : LogFile(logFile) {
         LogConfig config;
-        config.Level = LogLevel::Trace;
-        config.LogOutput = LogFile;
-        LogInit(config);
+        config.level = LogLevel::Trace;
+        config.logOutput = LogFile;
+        logInit(config);
         Cpu = new ToyCpuExecutor();
         Bus = new MemoryBus();
         Dbg = new Debugger(Cpu, Bus);
         Ram = new MemoryDevice(1024, false);
-        Bus->RegisterDevice(Ram, 0, 1024);
+        Bus->registerDevice(Ram, 0, 1024);
 
-        Bus->SetDebugger(Dbg);
-        Cpu->SetDebugger(Dbg);
+        Bus->setDebugger(Dbg);
+        Cpu->setDebugger(Dbg);
     }
 
     ~TraceTestContext() {
@@ -44,18 +44,18 @@ struct TraceTestContext {
     }
 
     void RunSteps(int steps) {
-        Cpu->Step(steps, 1000000); // Use a large cycle limit
+        Cpu->step(steps, 1000000);
     }
 
     void WriteProgram(const std::vector<uint32_t>& prog) {
         uint64_t addr = 0;
         for (uint32_t inst : prog) {
             MemAccess access;
-            access.Address = addr;
-            access.Size = 4;
-            access.Type = MemAccessType::Write;
-            access.Data = inst;
-            Bus->Write(access);
+            access.address = addr;
+            access.size = 4;
+            access.type = MemAccessType::Write;
+            access.data = inst;
+            Bus->write(access);
             addr += 4;
         }
     }
@@ -89,17 +89,17 @@ TEST(trace_custom_formatter) {
     std::string logFile = "test_custom_fmt.log";
     TraceTestContext ctx(logFile);
 
-    ctx.Dbg->SetTraceFormatter([&](const TraceRecord& record, const TraceOptions&) -> std::string {
+    ctx.Dbg->setTraceFormatter([&](const TraceRecord& record, const TraceOptions&) -> std::string {
         char buf[128];
-        std::snprintf(buf, sizeof(buf), "CUSTOM: 0x%lx %x", record.Pc, record.Inst);
+        std::snprintf(buf, sizeof(buf), "CUSTOM: 0x%lx %x", record.pc, record.inst);
         return std::string(buf);
     });
 
     TraceOptions opts;
-    opts.LogInstruction = true;
-    opts.LogMemEvents = false;
-    opts.LogBranchPrediction = false;
-    ctx.Dbg->ConfigureTrace(opts);
+    opts.logInstruction = true;
+    opts.logMemEvents = false;
+    opts.logBranchPrediction = false;
+    ctx.Dbg->configureTrace(opts);
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Nop());
@@ -116,10 +116,10 @@ TEST(trace_itrace_only) {
     TraceTestContext ctx(logFile);
 
     TraceOptions opts;
-    opts.LogInstruction = true;
-    opts.LogMemEvents = false;
-    opts.LogBranchPrediction = false;
-    ctx.Dbg->ConfigureTrace(opts);
+    opts.logInstruction = true;
+    opts.logMemEvents = false;
+    opts.logBranchPrediction = false;
+    ctx.Dbg->configureTrace(opts);
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Nop());
@@ -138,10 +138,10 @@ TEST(trace_mtrace_only) {
     TraceTestContext ctx(logFile);
 
     TraceOptions opts;
-    opts.LogInstruction = false;
-    opts.LogMemEvents = true;
-    opts.LogBranchPrediction = false;
-    ctx.Dbg->ConfigureTrace(opts);
+    opts.logInstruction = false;
+    opts.logMemEvents = true;
+    opts.logBranchPrediction = false;
+    ctx.Dbg->configureTrace(opts);
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Sw(0, 0, 4));
@@ -159,10 +159,10 @@ TEST(trace_itrace_mtrace_combo) {
     TraceTestContext ctx(logFile);
 
     TraceOptions opts;
-    opts.LogInstruction = true;
-    opts.LogMemEvents = true;
-    opts.LogBranchPrediction = false;
-    ctx.Dbg->ConfigureTrace(opts);
+    opts.logInstruction = true;
+    opts.logMemEvents = true;
+    opts.logBranchPrediction = false;
+    ctx.Dbg->configureTrace(opts);
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Lui(1, 0x8000));
@@ -181,10 +181,10 @@ TEST(trace_bptrace) {
     TraceTestContext ctx(logFile);
 
     TraceOptions opts;
-    opts.LogInstruction = true;
-    opts.LogMemEvents = false;
-    opts.LogBranchPrediction = true;
-    ctx.Dbg->ConfigureTrace(opts);
+    opts.logInstruction = true;
+    opts.logMemEvents = false;
+    opts.logBranchPrediction = true;
+    ctx.Dbg->configureTrace(opts);
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Lui(1, 0x1));
@@ -205,10 +205,10 @@ TEST(trace_all_enabled) {
     TraceTestContext ctx(logFile);
 
     TraceOptions opts;
-    opts.LogInstruction = true;
-    opts.LogMemEvents = true;
-    opts.LogBranchPrediction = true;
-    ctx.Dbg->ConfigureTrace(opts);
+    opts.logInstruction = true;
+    opts.logMemEvents = true;
+    opts.logBranchPrediction = true;
+    ctx.Dbg->configureTrace(opts);
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Lui(1, 0x8000));

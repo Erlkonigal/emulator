@@ -4,38 +4,37 @@
 #include <algorithm>
 #include <atomic>
 
-static void output_callback(const char *s, size_t len, void *user) {
+static void outputCallback(const char *s, size_t len, void* user) {
     VTermManager* self = static_cast<VTermManager*>(user);
-    if (self->on_output_) {
-        self->on_output_(s, len);
+    if (self->mOnOutput) {
+        self->mOnOutput(s, len);
     }
 }
 
 static const VTermScreenCallbacks kScreenCallbacks = {
     .damage = [](VTermRect rect, void* user) -> int {
         VTermManager* self = static_cast<VTermManager*>(user);
-        self->dirty_ = true;
+        self->mDirty = true;
         return 1;
     },
     .moverect = nullptr,
     .movecursor = [](VTermPos pos, VTermPos oldpos, int visible, void* user) {
         VTermManager* self = static_cast<VTermManager*>(user);
-        self->cursor_row_ = pos.row;
-        self->cursor_col_ = pos.col;
-        if (!self->has_focus_) {
-            self->cursor_visible_ = visible;
+        self->mCursorRow = pos.row;
+        self->mCursorCol = pos.col;
+        if (!self->mHasFocus) {
+            self->mCursorVisible = visible;
         }
-        self->dirty_ = true;
+        self->mDirty = true;
         return 0;
     },
     .settermprop = [](VTermProp prop, VTermValue* val, void* user) -> int {
         VTermManager* self = static_cast<VTermManager*>(user);
         if (prop == VTERM_PROP_CURSORVISIBLE) {
-            // 如果有焦点，忽略 vterm 的光标隐藏请求，始终保持光标可见
-            if (!self->has_focus_) {
-                self->cursor_visible_ = val->boolean;
+            if (!self->mHasFocus) {
+                self->mCursorVisible = val->boolean;
             }
-            self->dirty_ = true;
+            self->mDirty = true;
         }
         return 0;
     },
@@ -48,76 +47,69 @@ static const VTermScreenCallbacks kScreenCallbacks = {
 VTermManager::VTermManager() = default;
 
 VTermManager::~VTermManager() {
-    Shutdown();
+    shutdown();
 }
 
-void VTermManager::Initialize(int rows, int cols) {
-    if (vterm_) {
-        vterm_free(vterm_);
+void VTermManager::initialize(int rows, int cols) {
+    if (mVterm) {
+        vterm_free(mVterm);
     }
 
-    rows_ = rows;
-    cols_ = cols;
+    mRows = rows;
+    mCols = cols;
 
-    vterm_ = vterm_new(rows, cols);
-    vterm_set_utf8(vterm_, 1);
+    mVterm = vterm_new(rows, cols);
+    vterm_set_utf8(mVterm, 1);
 
-    vterm_output_set_callback(vterm_, output_callback, this);
+    vterm_output_set_callback(mVterm, outputCallback, this);
 
-    screen_ = vterm_obtain_screen(vterm_);
-    vterm_screen_enable_altscreen(screen_, 1);
+    mScreen = vterm_obtain_screen(mVterm);
+    vterm_screen_enable_altscreen(mScreen, 1);
 
-    dirty_ = true;
+    mDirty = true;
 
-    vterm_screen_set_callbacks(screen_, &kScreenCallbacks, this);
+    vterm_screen_set_callbacks(mScreen, &kScreenCallbacks, this);
 
-    vterm_screen_reset(screen_, 1);
+    vterm_screen_reset(mScreen, 1);
 }
 
-void VTermManager::Shutdown() {
-    if (vterm_) {
-        vterm_free(vterm_);
-        vterm_ = nullptr;
-        screen_ = nullptr;
-        state_ = nullptr;
-    }
-}
-
-void VTermManager::Resize(int rows, int cols) {
-    if (vterm_) {
-        vterm_set_size(vterm_, rows, cols);
-        rows_ = rows;
-        cols_ = cols;
-        dirty_ = true;
+void VTermManager::shutdown() {
+    if (mVterm) {
+        vterm_free(mVterm);
+        mVterm = nullptr;
+        mScreen = nullptr;
+        mState = nullptr;
     }
 }
 
-void VTermManager::PushOutput(const uint8_t* data, size_t len) {
-    if (vterm_) {
-        for (size_t i = 0; i < len; ++i) {
-            if (data[i] == '\n') {
-                char cr = '\r';
-                vterm_input_write(vterm_, &cr, 1);
-            }
-            vterm_input_write(vterm_, reinterpret_cast<const char*>(&data[i]), 1);
-        }
-        
-        dirty_ = true;
+void VTermManager::resize(int rows, int cols) {
+    if (mVterm) {
+        vterm_set_size(mVterm, rows, cols);
+        mRows = rows;
+        mCols = cols;
+        mDirty = true;
     }
 }
 
-void VTermManager::PushLog(const char* level, const char* msg) {
-    if (vterm_) {
+void VTermManager::pushChar(const char ch) {
+    if (mVterm) {
+        vterm_input_write(mVterm, &ch, 1);
+        mDirty = true;
+    }
+}
+
+void VTermManager::pushLog(const char* msg) {
+    if (mVterm) {
         char formatted[512];
         snprintf(formatted, sizeof(formatted), "%s\r\n", msg);
         
-        vterm_input_write(vterm_, formatted, strlen(formatted));
-        dirty_ = true;
+        vterm_input_write(mVterm, formatted, strlen(formatted));
+        mDirty = true;
     }
 }
 
-void VTermManager::ProcessInput(int ch) {
-    if (!vterm_ || !has_focus_) return;
+void VTermManager::processInput(int ch) {
+    if (!mVterm || !mHasFocus) return;
 
     VTermKey key = VTERM_KEY_NONE;
     VTermModifier mod = VTERM_MOD_NONE;
@@ -174,32 +166,32 @@ void VTermManager::ProcessInput(int ch) {
             return;
         default:
             if (ch >= 32 && ch < 127) {
-                vterm_keyboard_unichar(vterm_, static_cast<uint32_t>(ch), mod);
-                dirty_ = true;
+                vterm_keyboard_unichar(mVterm, static_cast<uint32_t>(ch), mod);
+                mDirty = true;
                 return;
             }
             break;
     }
 
     if (key != VTERM_KEY_NONE) {
-        vterm_keyboard_key(vterm_, key, mod);
-        dirty_ = true;
+        vterm_keyboard_key(mVterm, key, mod);
+        mDirty = true;
     }
 }
 
-void VTermManager::Render(bool force_cursor) {
-    if (!vterm_ || !vterm_win_) return;
+void VTermManager::render(bool forceCursor) {
+    if (!mVterm || !mVtermWin) return;
 
-    bool was_dirty = dirty_.exchange(false);
+    bool wasDirty = mDirty.exchange(false);
 
-    if (was_dirty) {
+    if (wasDirty) {
         VTermScreenCell cell;
-        werase(vterm_win_);
+        werase(mVtermWin);
 
-        for (int row = 0; row < rows_; ++row) {
-            for (int col = 0; col < cols_; ++col) {
+        for (int row = 0; row < mRows; ++row) {
+            for (int col = 0; col < mCols; ++col) {
                 VTermPos pos = {row, col};
-                if (vterm_screen_get_cell(screen_, pos, &cell) == 1) {
+                if (vterm_screen_get_cell(mScreen, pos, &cell) == 1) {
                     int attr = 0;
                     if (cell.attrs.bold) attr |= A_BOLD;
                     if (cell.attrs.italic) attr |= A_ITALIC;
@@ -211,66 +203,66 @@ void VTermManager::Render(bool force_cursor) {
                     if (cell.attrs.reverse) attr |= A_REVERSE;
                     if (cell.attrs.strike) attr |= A_STANDOUT;
 
-                    if (attr) wattron(vterm_win_, attr);
+                    if (attr) wattron(mVtermWin, attr);
                     if (cell.chars[0] > 0) {
-                        mvwaddch(vterm_win_, row, col, cell.chars[0]);
+                        mvwaddch(mVtermWin, row, col, cell.chars[0]);
                     } else {
-                        mvwaddch(vterm_win_, row, col, ' ');
+                        mvwaddch(mVtermWin, row, col, ' ');
                     }
-                    if (attr) wattroff(vterm_win_, attr);
+                    if (attr) wattroff(mVtermWin, attr);
                 }
             }
         }
     }
 
-    if (was_dirty || force_cursor) {
-        if (cursor_visible_ && cursor_row_ >= 0 && cursor_row_ < rows_ &&
-            cursor_col_ >= 0 && cursor_col_ < cols_) {
-            wmove(vterm_win_, cursor_row_, cursor_col_);
+    if (wasDirty || forceCursor) {
+        if (mCursorVisible && mCursorRow >= 0 && mCursorRow < mRows &&
+            mCursorCol >= 0 && mCursorCol < mCols) {
+            wmove(mVtermWin, mCursorRow, mCursorCol);
             curs_set(1);
         } else {
             curs_set(0);
         }
-        wrefresh(vterm_win_);
+        wrefresh(mVtermWin);
     }
 }
 
-void VTermManager::SetFocus(bool focus) {
-    has_focus_ = focus;
-    if (focus && vterm_) {
-        vterm_state_focus_in(vterm_obtain_state(vterm_));
-    } else if (vterm_) {
-        vterm_state_focus_out(vterm_obtain_state(vterm_));
+void VTermManager::setFocus(bool focus) {
+    mHasFocus = focus;
+    if (focus && mVterm) {
+        vterm_state_focus_in(vterm_obtain_state(mVterm));
+    } else if (mVterm) {
+        vterm_state_focus_out(vterm_obtain_state(mVterm));
     }
 }
 
-void VTermManager::ShowCursor() {
-    cursor_visible_ = true;
+void VTermManager::showCursor() {
+    mCursorVisible = true;
     curs_set(1);
 }
 
-void VTermManager::HideCursor() {
-    cursor_visible_ = false;
+void VTermManager::hideCursor() {
+    mCursorVisible = false;
     curs_set(0);
 }
 
-void VTermManager::DrawBorder(bool focused) {
-    if (border_win_) {
+void VTermManager::drawBorder(bool focused) {
+    if (mBorderWin) {
         if (focused) {
-            wborder(border_win_, '|', '|', '-', '-', '+', '+', '+', '+');
+            wborder(mBorderWin, '|', '|', '-', '-', '+', '+', '+', '+');
         } else {
-            wborder(border_win_, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ');
+            wborder(mBorderWin, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ');
         }
-        wrefresh(border_win_);
+        wrefresh(mBorderWin);
     }
 }
 
-void VTermManager::ForceRefresh() {
-    if (vterm_win_) {
-        if (cursor_visible_ && cursor_row_ >= 0 && cursor_row_ < rows_ &&
-            cursor_col_ >= 0 && cursor_col_ < cols_) {
-            wmove(vterm_win_, cursor_row_, cursor_col_);
+void VTermManager::forceRefresh() {
+    if (mVtermWin) {
+        if (mCursorVisible && mCursorRow >= 0 && mCursorRow < mRows &&
+            mCursorCol >= 0 && mCursorCol < mCols) {
+            wmove(mVtermWin, mCursorRow, mCursorCol);
         }
-        wrefresh(vterm_win_);
+        wrefresh(mVtermWin);
     }
 }

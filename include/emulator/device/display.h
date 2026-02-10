@@ -18,45 +18,45 @@ public:
     SdlDisplayDevice();
     ~SdlDisplayDevice();
 
-    bool Init(uint32_t width, uint32_t height, const char* title);
-    bool InitHeadless(uint32_t width, uint32_t height);
-    void Shutdown();
+    bool init(uint32_t width, uint32_t height, const char* title);
+    bool initHeadless(uint32_t width, uint32_t height);
+    void shutdown();
 
-    bool IsReady() const;
-    void PollEvents(uint32_t timeoutMs);
-    bool IsQuitRequested() const;
-    void PushKey(uint32_t key);
+    bool isReady() const;
+    void pollEvents(uint32_t timeoutMs);
+    bool isQuitRequested() const;
+    void pushKey(uint32_t key);
 
-    uint32_t GetWidth() const;
-    uint32_t GetHeight() const;
-    uint32_t GetPitch() const;
-    uint64_t GetFrameBufferSize() const;
-    uint64_t GetMappedSize() const;
+    uint32_t getWidth() const;
+    uint32_t getHeight() const;
+    uint32_t getPitch() const;
+    uint64_t getFrameBufferSize() const;
+    uint64_t getMappedSize() const;
 
-    bool IsDirty() const;
-    bool IsPresentRequested() const;
-    bool ConsumePresentRequest();
-    void Present();
+    bool isDirty() const;
+    bool isPresentRequested() const;
+    bool consumePresentRequest();
+    void present();
 
-    uint32_t GetUpdateFrequency() const override;
+    uint32_t getUpdateFrequency() const override;
 
 private:
     struct SdlDisplayState;
-    SdlDisplayState* State = nullptr;
+    SdlDisplayState* mState = nullptr;
     
-    std::atomic<bool> Dirty{false};
-    std::atomic<bool> PresentRequested{false};
+    std::atomic<bool> mDirty{false};
+    std::atomic<bool> mPresentRequested{false};
     
-    mutable std::mutex InputMutex;
-    mutable std::mutex FrameMutex;
-    bool QuitRequested = false;
-    uint32_t LastKey = 0;
-    std::deque<uint32_t> KeyQueue;
+    mutable std::mutex mInputMutex;
+    mutable std::mutex mFrameMutex;
+    bool mQuitRequested = false;
+    uint32_t mLastKey = 0;
+    std::deque<uint32_t> mKeyQueue;
 
-    bool ReadRegister(uint64_t offset, uint64_t* value);
-    bool WriteRegister(uint64_t offset, uint64_t value);
-    MemResponse HandleRead(const MemAccess& access);
-    MemResponse HandleWrite(const MemAccess& access);
+    bool readRegister(uint64_t offset, uint64_t* value);
+    bool writeRegister(uint64_t offset, uint64_t value);
+    MemResponse handleRead(const MemAccess& access);
+    MemResponse handleWrite(const MemAccess& access);
 };
 
 #endif

@@ -14,51 +14,51 @@ public:
     VTermManager();
     ~VTermManager();
 
-    void Initialize(int rows, int cols);
-    void Shutdown();
-    void Resize(int rows, int cols);
+    void initialize(int rows, int cols);
+    void shutdown();
+    void resize(int rows, int cols);
 
-    void PushOutput(const uint8_t* data, size_t len);
-    void PushLog(const char* level, const char* msg);
-    void ProcessInput(int ch);
-    void Render(bool force_cursor = false);
-    bool IsDirty() const { return dirty_.load(); }
-    void ClearDirty() { dirty_.store(false); }
+    void pushChar(const char ch);
+    void pushLog(const char* msg);
+    void processInput(int ch);
+    void render(bool forceCursor = false);
+    bool isDirty() const { return mDirty.load(); }
+    void clearDirty() { mDirty.store(false); }
 
-    void SetFocus(bool focus);
-    bool HasFocus() const { return has_focus_; }
+    void setFocus(bool focus);
+    bool hasFocus() const { return mHasFocus; }
 
-    void ShowCursor();
-    void HideCursor();
-    void DrawBorder(bool focused);
+    void showCursor();
+    void hideCursor();
+    void drawBorder(bool focused);
 
-    void SetWindow(WINDOW* win) { vterm_win_ = win; }
-    WINDOW* GetWindow() { return vterm_win_; }
+    void setWindow(WINDOW* win) { mVtermWin = win; }
+    WINDOW* getWindow() { return mVtermWin; }
 
-    void ForceRefresh();
-    int GetCursorRow() const { return cursor_row_; }
-    int GetCursorCol() const { return cursor_col_; }
-    bool IsCursorVisible() const { return cursor_visible_; }
+    void forceRefresh();
+    int getCursorRow() const { return mCursorRow; }
+    int getCursorCol() const { return mCursorCol; }
+    bool isCursorVisible() const { return mCursorVisible; }
 
-    void SetOnOutput(std::function<void(const char*, size_t)> callback) { on_output_ = callback; }
+    void setOnOutput(std::function<void(const char*, size_t)> callback) { mOnOutput = callback; }
 
 private:
-    VTerm* vterm_ = nullptr;
-    VTermScreen* screen_ = nullptr;
-    VTermState* state_ = nullptr;
-    WINDOW* vterm_win_ = nullptr;
-    WINDOW* border_win_ = nullptr;
+    VTerm* mVterm = nullptr;
+    VTermScreen* mScreen = nullptr;
+    VTermState* mState = nullptr;
+    WINDOW* mVtermWin = nullptr;
+    WINDOW* mBorderWin = nullptr;
     
 public:
-    bool has_focus_ = false;
-    bool cursor_visible_ = true;
-    int cursor_row_ = 0;
-    int cursor_col_ = 0;
-    std::atomic<bool> dirty_{false};
+    bool mHasFocus = false;
+    bool mCursorVisible = true;
+    int mCursorRow = 0;
+    int mCursorCol = 0;
+    std::atomic<bool> mDirty{false};
     
-    std::function<void(const char*, size_t)> on_output_;
+    std::function<void(const char*, size_t)> mOnOutput;
     
 private:
-    int rows_ = 0;
-    int cols_ = 0;
+    int mRows = 0;
+    int mCols = 0;
 };

@@ -45,267 +45,258 @@ ToyCpuExecutor* GetLastToyCpu() {
 
 ToyCpuExecutor::ToyCpuExecutor() {
     g_last = this;
-    Reset();
+    reset();
 }
 
 ToyCpuExecutor::~ToyCpuExecutor() = default;
 
-void ToyCpuExecutor::Reset() {
-    std::memset(Regs, 0, sizeof(Regs));
-    Pc = 0;
-    Cycle = 0;
-    LastError = CpuErrorDetail{};
+void ToyCpuExecutor::reset() {
+    std::memset(mRegs, 0, sizeof(mRegs));
+    mPc = 0;
+    mCycle = 0;
+    mLastError = CpuErrorDetail{};
 }
 
-CpuErrorDetail ToyCpuExecutor::GetLastError() const {
-    return LastError;
+CpuErrorDetail ToyCpuExecutor::getLastError() const {
+    return mLastError;
 }
 
-uint64_t ToyCpuExecutor::GetPc() const {
-    return Pc;
+uint64_t ToyCpuExecutor::getPc() const {
+    return mPc;
 }
 
-void ToyCpuExecutor::SetPc(uint64_t pc) {
-    Pc = pc;
+void ToyCpuExecutor::setPc(uint64_t pc) {
+    mPc = pc;
 }
 
-uint64_t ToyCpuExecutor::GetCycle() const {
-    return Cycle;
+uint64_t ToyCpuExecutor::getCycle() const {
+    return mCycle;
 }
 
-uint64_t ToyCpuExecutor::GetRegister(uint32_t regId) const {
+uint64_t ToyCpuExecutor::getRegister(uint32_t regId) const {
     if (regId >= kRegCount) {
         return 0;
     }
     if (regId == 0) {
         return 0;
     }
-    return Regs[regId];
+    return mRegs[regId];
 }
 
-void ToyCpuExecutor::SetRegister(uint32_t regId, uint64_t value) {
+void ToyCpuExecutor::setRegister(uint32_t regId, uint64_t value) {
     if (regId >= kRegCount) {
         return;
     }
     if (regId == 0) {
         return;
     }
-    Regs[regId] = value;
+    mRegs[regId] = value;
 }
 
-void ToyCpuExecutor::SetDebugger(ICpuDebugger* debugger) {
-    Dbg = debugger;
+void ToyCpuExecutor::setDebugger(ICpuDebugger* debugger) {
+    mDbg = debugger;
 }
 
-uint32_t ToyCpuExecutor::GetRegisterCount() const {
+uint32_t ToyCpuExecutor::getRegisterCount() const {
     return kRegCount;
 }
 
-bool ToyCpuExecutor::Fault(CpuErrorType type, uint64_t addr, uint32_t size) {
-    LastError.Type = type;
-    LastError.Address = addr;
-    LastError.Size = size;
+bool ToyCpuExecutor::fault(CpuErrorType type, uint64_t addr, uint32_t size) {
+    mLastError.type = type;
+    mLastError.address = addr;
+    mLastError.size = size;
     return false;
 }
 
-uint32_t ToyCpuExecutor::FetchU32(uint64_t pc, MemResponse* out) {
-    if (out == nullptr || Dbg == nullptr) {
+uint32_t ToyCpuExecutor::fetchU32(uint64_t pc, MemResponse* out) {
+    if (out == nullptr || mDbg == nullptr) {
         return 0;
     }
     MemAccess access;
-    access.Address = pc;
-    access.Size = 4;
-    access.Type = MemAccessType::Fetch;
-    *out = Dbg->BusRead(access);
-    if (!out->Success) {
+    access.address = pc;
+    access.size = 4;
+    access.type = MemAccessType::Fetch;
+    *out = mDbg->busRead(access);
+    if (!out->success) {
         return 0;
     }
-    return static_cast<uint32_t>(out->Data & 0xffffffffu);
+    return static_cast<uint32_t>(out->data & 0xffffffffu);
 }
 
-StepResult ToyCpuExecutor::Step(uint64_t maxInstructions, uint64_t maxCycles) {
+StepResult ToyCpuExecutor::step(uint64_t maxInstructions, uint64_t maxCycles) {
     StepResult result;
-    result.Success = true;
-    result.InstructionsExecuted = 0;
-    result.CyclesExecuted = 0;
+    result.success = true;
+    result.instructionsExecuted = 0;
+    result.cyclesExecuted = 0;
 
-    if (Dbg == nullptr) {
-        Fault(CpuErrorType::DeviceFault, Pc, 0);
-        result.Success = false;
+    if (mDbg == nullptr) {
+        fault(CpuErrorType::DeviceFault, mPc, 0);
+        result.success = false;
         return result;
     }
 
-    auto traceOption = (Dbg) ? Dbg->GetTraceOptions() : TraceOptions{};
-    bool hasBreakpoints = Dbg && Dbg->HasBreakpoints();
+    auto traceOption = (mDbg) ? mDbg->getTraceOptions() : TraceOptions{};
+    bool hasBreakpoints = mDbg && mDbg->hasBreakpoints();
 
-    while (result.InstructionsExecuted < maxInstructions && result.CyclesExecuted < maxCycles) {
-        // Optimization: Cache flags
+    while (result.instructionsExecuted < maxInstructions && result.cyclesExecuted < maxCycles) {
+        bool logInstructions = traceOption.logInstruction;
+        bool logMemEvents = traceOption.logMemEvents;
+        bool logBranchPrediction = traceOption.logBranchPrediction;
 
-        bool logInstructions = traceOption.LogInstruction;
-        bool logMemEvents = traceOption.LogMemEvents;
-        bool logBranchPrediction = traceOption.LogBranchPrediction;
-
-        if (hasBreakpoints && Dbg->IsBreakpoint(Pc)) {
-             // Breakpoint hit, stop immediately
+        if (hasBreakpoints && mDbg->isBreakpoint(mPc)) {
              return result;
         }
 
-        // Prepare trace record
         TraceRecord record;
-        record.Pc = Pc;
-        record.CycleBegin = Cycle;
-        // Toy ISA has no branches in this subset (maybe Jump is missing?), so always false
-        record.IsBranch = false; 
+        record.pc = mPc;
+        record.cycleBegin = mCycle;
+        record.isBranch = false;
 
         MemResponse fetch;
-        uint32_t inst = FetchU32(Pc, &fetch);
+        uint32_t inst = fetchU32(mPc, &fetch);
 
-        // Record fetch if applicable
         if (logMemEvents) {
             MemAccessEvent evt;
-            evt.Type = MemAccessType::Fetch;
-            evt.Address = Pc;
-            evt.Size = 4;
-            evt.Data = inst;
-            evt.LatencyCycles = fetch.LatencyCycles;
-            record.MemEvents.push_back(evt);
+            evt.type = MemAccessType::Fetch;
+            evt.address = mPc;
+            evt.size = 4;
+            evt.data = inst;
+            evt.latencyCycles = fetch.latencyCycles;
+            record.memEvents.push_back(evt);
         }
 
-        if (!fetch.Success) {
-            LastError = fetch.Error;
-            // Even on error, we might want to trace what happened so far, but PC hasn't moved.
-            // Let's log if we have a sink.
+        if (!fetch.success) {
+            mLastError = fetch.error;
             if (logMemEvents) {
-                record.Inst = 0;
-                record.Decoded = "FETCH_ERROR";
-                record.CycleEnd = Cycle;
-                Dbg->LogTrace(record);
+                record.inst = 0;
+                record.decoded = "FETCH_ERROR";
+                record.cycleEnd = mCycle;
+                mDbg->logTrace(record);
             }
-            result.Success = false;
+            result.success = false;
             return result;
         }
 
-        record.Inst = inst;
-        uint64_t pcBefore = Pc;
-        Pc += 4;
-        ++Cycle;
+        record.inst = inst;
+        uint64_t pcBefore = mPc;
+        mPc += 4;
+        ++mCycle;
         
-        result.InstructionsExecuted++;
-        result.CyclesExecuted++; // Base 1 cycle per instruction
+        result.instructionsExecuted++;
+        result.cyclesExecuted++;
         
-        // Simple decoder for trace
         uint8_t op = OpCode(inst);
         bool success = true;
 
         if (op == static_cast<uint8_t>(toy::Op::Nop)) {
-            if (logInstructions) record.Decoded = "NOP";
+            if (logInstructions) record.decoded = "NOP";
         } else if (op == static_cast<uint8_t>(toy::Op::Halt)) {
-            if (logInstructions) record.Decoded = "HALT";
-            success = Fault(CpuErrorType::Halt, pcBefore, 4);
+            if (logInstructions) record.decoded = "HALT";
+            success = fault(CpuErrorType::Halt, pcBefore, 4);
         } else if (op == static_cast<uint8_t>(toy::Op::Lui)) {
             uint8_t rd = Rd(inst);
             uint16_t imm = Imm16(inst);
-            if (logInstructions) record.Decoded = "LUI r" + std::to_string(rd) + ", " + std::to_string(imm);
+            if (logInstructions) record.decoded = "LUI r" + std::to_string(rd) + ", " + std::to_string(imm);
             
             uint64_t value = static_cast<uint64_t>(imm) << 16;
-            SetRegister(rd, value);
+            setRegister(rd, value);
         } else if (op == static_cast<uint8_t>(toy::Op::Ori)) {
             uint8_t rd = Rd(inst);
             uint16_t imm = Imm16(inst);
-            if (logInstructions) record.Decoded = "ORI r" + std::to_string(rd) + ", " + std::to_string(imm);
+            if (logInstructions) record.decoded = "ORI r" + std::to_string(rd) + ", " + std::to_string(imm);
 
-            uint64_t value = GetRegister(rd) | static_cast<uint64_t>(imm);
-            SetRegister(rd, value);
+            uint64_t value = getRegister(rd) | static_cast<uint64_t>(imm);
+            setRegister(rd, value);
         } else if (op == static_cast<uint8_t>(toy::Op::Beq)) {
             uint8_t r0 = Rd(inst);
             uint8_t r1 = Rs(inst);
             int8_t off = Off8(inst);
             if (logInstructions) {
-                record.Decoded = "BEQ r" + std::to_string(r0) + ", r" + std::to_string(r1) +
+                record.decoded = "BEQ r" + std::to_string(r0) + ", r" + std::to_string(r1) +
                     ", " + std::to_string(off);
             }
 
-            record.IsBranch = true;
-            record.Branch.PredictedTaken = false;
-            record.Branch.PredictedTarget = Pc + OffsetToWords(off);
+            record.isBranch = true;
+            record.branch.predictedTaken = false;
+            record.branch.predictedTarget = mPc + OffsetToWords(off);
 
-            bool taken = GetRegister(r0) == GetRegister(r1);
-            record.Branch.Taken = taken;
-            record.Branch.Target = Pc + OffsetToWords(off);
+            bool taken = getRegister(r0) == getRegister(r1);
+            record.branch.taken = taken;
+            record.branch.target = mPc + OffsetToWords(off);
             if (taken) {
-                Pc = Pc + OffsetToWords(off);
+                mPc = mPc + OffsetToWords(off);
             }
         } else if (op == static_cast<uint8_t>(toy::Op::Lw)) {
             uint8_t rd = Rd(inst);
             uint8_t rs = Rs(inst);
             int8_t off = Off8(inst);
             if (logInstructions) {
-                record.Decoded = "LW r" + std::to_string(rd) + ", [r" + std::to_string(rs) + "+" + std::to_string(off) + "]";
+                record.decoded = "LW r" + std::to_string(rd) + ", [r" + std::to_string(rs) + "+" + std::to_string(off) + "]";
             }
 
-            uint64_t addr = GetRegister(rs) + static_cast<int64_t>(off);
+            uint64_t addr = getRegister(rs) + static_cast<int64_t>(off);
             MemAccess access;
-            access.Address = addr;
-            access.Size = 4;
-            access.Type = MemAccessType::Read;
-            MemResponse r = Dbg->BusRead(access);
+            access.address = addr;
+            access.size = 4;
+            access.type = MemAccessType::Read;
+            MemResponse r = mDbg->busRead(access);
 
             if (logMemEvents) {
                 MemAccessEvent evt;
-                evt.Type = MemAccessType::Read;
-                evt.Address = addr;
-                evt.Size = 4;
-                evt.Data = r.Data;
-                evt.LatencyCycles = r.LatencyCycles;
-                record.MemEvents.push_back(evt);
+                evt.type = MemAccessType::Read;
+                evt.address = addr;
+                evt.size = 4;
+                evt.data = r.data;
+                evt.latencyCycles = r.latencyCycles;
+                record.memEvents.push_back(evt);
             }
 
-            if (!r.Success) {
-                LastError = r.Error;
+            if (!r.success) {
+                mLastError = r.error;
                 success = false;
             } else {
-                SetRegister(rd, static_cast<uint32_t>(r.Data & 0xffffffffu));
+                setRegister(rd, static_cast<uint32_t>(r.data & 0xffffffffu));
             }
         } else if (op == static_cast<uint8_t>(toy::Op::Sw)) {
-            uint8_t rs = Rd(inst); // Source register for store is in Rd position in encode
-            uint8_t rd = Rs(inst); // Base address register
+            uint8_t rs = Rd(inst);
+            uint8_t rd = Rs(inst);
             int8_t off = Off8(inst);
             if (logInstructions) {
-                record.Decoded = "SW r" + std::to_string(rs) + ", [r" + std::to_string(rd) + "+" + std::to_string(off) + "]";
+                record.decoded = "SW r" + std::to_string(rs) + ", [r" + std::to_string(rd) + "+" + std::to_string(off) + "]";
             }
 
-            uint64_t addr = GetRegister(rd) + static_cast<int64_t>(off);
+            uint64_t addr = getRegister(rd) + static_cast<int64_t>(off);
             MemAccess access;
-            access.Address = addr;
-            access.Size = 4;
-            access.Type = MemAccessType::Write;
-            access.Data = static_cast<uint32_t>(GetRegister(rs) & 0xffffffffu);
-            MemResponse w = Dbg->BusWrite(access);
+            access.address = addr;
+            access.size = 4;
+            access.type = MemAccessType::Write;
+            access.data = static_cast<uint32_t>(getRegister(rs) & 0xffffffffu);
+            MemResponse w = mDbg->busWrite(access);
 
             if (logMemEvents) {
                 MemAccessEvent evt;
-                evt.Type = MemAccessType::Write;
-                evt.Address = addr;
-                evt.Size = 4;
-                evt.Data = access.Data;
-                evt.LatencyCycles = w.LatencyCycles;
-                record.MemEvents.push_back(evt);
+                evt.type = MemAccessType::Write;
+                evt.address = addr;
+                evt.size = 4;
+                evt.data = access.data;
+                evt.latencyCycles = w.latencyCycles;
+                record.memEvents.push_back(evt);
             }
 
-            if (!w.Success) {
-                LastError = w.Error;
+            if (!w.success) {
+                mLastError = w.error;
                 success = false;
             }
         } else {
-            if (logInstructions) record.Decoded = "INVALID_OP";
-            success = Fault(CpuErrorType::InvalidOp, pcBefore, 4);
+            if (logInstructions) record.decoded = "INVALID_OP";
+            success = fault(CpuErrorType::InvalidOp, pcBefore, 4);
         }
 
-        record.CycleEnd = Cycle;
-        if (logInstructions || logBranchPrediction || logMemEvents) Dbg->LogTrace(record);
+        record.cycleEnd = mCycle;
+        if (logInstructions || logBranchPrediction || logMemEvents) mDbg->logTrace(record);
 
         if (!success) {
-            result.Success = false;
+            result.success = false;
             return result;
         }
     }

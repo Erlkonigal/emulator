@@ -16,33 +16,33 @@ public:
     ToyCpuExecutor();
     ~ToyCpuExecutor() override;
 
-    void Reset() override;
-    StepResult Step(uint64_t maxInstructions, uint64_t maxCycles) override;
+    void reset() override;
+    StepResult step(uint64_t maxInstructions, uint64_t maxCycles) override;
 
-    CpuErrorDetail GetLastError() const override;
+    CpuErrorDetail getLastError() const override;
 
-    uint64_t GetPc() const override;
-    void SetPc(uint64_t pc) override;
-    uint64_t GetCycle() const override;
+    uint64_t getPc() const override;
+    void setPc(uint64_t pc) override;
+    uint64_t getCycle() const override;
 
-    uint64_t GetRegister(uint32_t regId) const override;
-    void SetRegister(uint32_t regId, uint64_t value) override;
+    uint64_t getRegister(uint32_t regId) const override;
+    void setRegister(uint32_t regId, uint64_t value) override;
 
-    void SetDebugger(ICpuDebugger* debugger) override;
+    void setDebugger(ICpuDebugger* debugger) override;
 
-    uint32_t GetRegisterCount() const override;
+    uint32_t getRegisterCount() const override;
 
 private:
-    bool Fault(CpuErrorType type, uint64_t addr, uint32_t size);
-    uint32_t FetchU32(uint64_t pc, MemResponse* out);
+    bool fault(CpuErrorType type, uint64_t addr, uint32_t size);
+    uint32_t fetchU32(uint64_t pc, MemResponse* out);
 
-    ICpuDebugger* Dbg = nullptr;
+    ICpuDebugger* mDbg = nullptr;
 
     static constexpr uint32_t kRegCount = 16;
-    uint64_t Regs[kRegCount] = {};
-    uint64_t Pc = 0;
-    uint64_t Cycle = 0;
-    CpuErrorDetail LastError;
+    uint64_t mRegs[kRegCount] = {};
+    uint64_t mPc = 0;
+    uint64_t mCycle = 0;
+    CpuErrorDetail mLastError;
 };
 
 #endif

@@ -48,7 +48,7 @@ bool LastErrorIs(CpuErrorType t) {
     if (cpu == nullptr) {
         return false;
     }
-    return cpu->GetLastError().Type == t;
+    return cpu->getLastError().type == t;
 }
 
 } // namespace testutil

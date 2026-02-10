@@ -10,13 +10,13 @@ class MemoryBus;
 class ExpressionParser {
 public:
     ExpressionParser(ICpuExecutor* cpu, MemoryBus* bus, const std::string& expr);
-    uint64_t Parse();
+    uint64_t parse();
 
 private:
-    ICpuExecutor* cpu_;
-    MemoryBus* bus_;
-    std::string expr_;
-    size_t pos_;
+    ICpuExecutor* mCpu;
+    MemoryBus* mBus;
+    std::string mExpr;
+    size_t mPos;
     
     enum class TokenType {
         End,
@@ -30,18 +30,18 @@ private:
 
     struct Token {
         TokenType type;
-        uint64_t value; // For numbers
-        std::string text; // For registers
+        uint64_t value;
+        std::string text;
     };
 
-    Token curr_;
+    Token mCurr;
 
-    void NextToken();
-    uint64_t ParseExpr();
-    uint64_t ParseTerm();
-    uint64_t ParseFactor();
-    uint64_t ReadMemory(uint64_t addr);
-    uint64_t GetRegisterValue(const std::string& name);
+    void nextToken();
+    uint64_t parseExpr();
+    uint64_t parseTerm();
+    uint64_t parseFactor();
+    uint64_t readMemory(uint64_t addr);
+    uint64_t getRegisterValue(const std::string& name);
 };
 
 #endif

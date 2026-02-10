@@ -4,101 +4,101 @@
 
 #include <algorithm>
 
-void MemoryBus::RegisterDevice(Device* device, uint64_t base, uint64_t size, const std::string& name) {
-    for (const auto& existing : Devices) {
-        if (existing.DevicePtr == device && existing.Base == base && existing.Size == size) {
+void MemoryBus::registerDevice(Device* device, uint64_t base, uint64_t size, const std::string& name) {
+    for (const auto& existing : mDevices) {
+        if (existing.devicePtr == device && existing.base == base && existing.size == size) {
             return;
         }
     }
 
     DeviceMapping mapping;
-    mapping.Name = name;
-    mapping.DevicePtr = device;
-    mapping.Base = base;
-    mapping.Size = size;
-    mapping.End = base + size;
-    Devices.push_back(mapping);
-    LastHit = nullptr;
+    mapping.name = name;
+    mapping.devicePtr = device;
+    mapping.base = base;
+    mapping.size = size;
+    mapping.end = base + size;
+    mDevices.push_back(mapping);
+    mLastHit = nullptr;
 
     bool found = false;
-    for (auto* d : UniqueDevices) {
+    for (auto* d : mUniqueDevices) {
         if (d == device) { found = true; break; }
     }
     if (!found) {
-        UniqueDevices.push_back(device);
+        mUniqueDevices.push_back(device);
     }
 }
 
-void MemoryBus::SyncAll(uint64_t currentCycle) {
-    for (auto* device : UniqueDevices) {
+void MemoryBus::syncAll(uint64_t currentCycle) {
+    for (auto* device : mUniqueDevices) {
         if (device) {
-            device->Sync(currentCycle);
+            device->sync(currentCycle);
         }
     }
 }
 
-void MemoryBus::SetDebugger(Debugger* debugger) {
-    Dbg = debugger;
+void MemoryBus::setDebugger(Debugger* debugger) {
+    mDbg = debugger;
 }
 
-const MemoryBus::DeviceMapping* MemoryBus::FindMapping(uint64_t address) const {
-    if (LastHit != nullptr && address >= LastHit->Base && address < LastHit->End) {
-        return LastHit;
+const MemoryBus::DeviceMapping* MemoryBus::findMapping(uint64_t address) const {
+    if (mLastHit != nullptr && address >= mLastHit->base && address < mLastHit->end) {
+        return mLastHit;
     }
-    for (const auto& mapping : Devices) {
-        if (address >= mapping.Base && address < mapping.End) {
-            LastHit = &mapping;
+    for (const auto& mapping : mDevices) {
+        if (address >= mapping.base && address < mapping.end) {
+            mLastHit = &mapping;
             return &mapping;
         }
     }
     return nullptr;
 }
 
-Device* MemoryBus::GetDevice(const std::string& name) const {
+Device* MemoryBus::getDevice(const std::string& name) const {
     if (name.empty()) {
         return nullptr;
     }
-    for (const auto& mapping : Devices) {
-        if (mapping.Name == name) {
-            return mapping.DevicePtr;
+    for (const auto& mapping : mDevices) {
+        if (mapping.name == name) {
+            return mapping.devicePtr;
         }
     }
     return nullptr;
 }
 
-Device* MemoryBus::FindDevice(uint64_t address) const {
-    const DeviceMapping* mapping = FindMapping(address);
-    return mapping ? mapping->DevicePtr : nullptr;
+Device* MemoryBus::findDevice(uint64_t address) const {
+    const DeviceMapping* mapping = findMapping(address);
+    return mapping ? mapping->devicePtr : nullptr;
 }
 
-MemResponse MemoryBus::Read(const MemAccess& access) {
-    const DeviceMapping* mapping = FindMapping(access.Address);
-    if (mapping == nullptr || mapping->DevicePtr == nullptr) {
+MemResponse MemoryBus::read(const MemAccess& access) {
+    const DeviceMapping* mapping = findMapping(access.address);
+    if (mapping == nullptr || mapping->devicePtr == nullptr) {
         MemResponse response;
-        response.Success = false;
-        response.Error.Type = CpuErrorType::AccessFault;
-        response.Error.Address = access.Address;
-        response.Error.Size = access.Size;
+        response.success = false;
+        response.error.type = CpuErrorType::AccessFault;
+        response.error.address = access.address;
+        response.error.size = access.size;
         return response;
     }
 
     MemAccess relativeAccess = access;
-    relativeAccess.Address = access.Address - mapping->Base;
-    return mapping->DevicePtr->Read(relativeAccess);
+    relativeAccess.address = access.address - mapping->base;
+    return mapping->devicePtr->read(relativeAccess);
 }
 
-MemResponse MemoryBus::Write(const MemAccess& access) {
-    const DeviceMapping* mapping = FindMapping(access.Address);
-    if (mapping == nullptr || mapping->DevicePtr == nullptr) {
+MemResponse MemoryBus::write(const MemAccess& access) {
+    const DeviceMapping* mapping = findMapping(access.address);
+    if (mapping == nullptr || mapping->devicePtr == nullptr) {
         MemResponse response;
-        response.Success = false;
-        response.Error.Type = CpuErrorType::AccessFault;
-        response.Error.Address = access.Address;
-        response.Error.Size = access.Size;
+        response.success = false;
+        response.error.type = CpuErrorType::AccessFault;
+        response.error.address = access.address;
+        response.error.size = access.size;
         return response;
     }
 
     MemAccess relativeAccess = access;
-    relativeAccess.Address = access.Address - mapping->Base;
-    return mapping->DevicePtr->Write(relativeAccess);
+    relativeAccess.address = access.address - mapping->base;
+    return mapping->devicePtr->write(relativeAccess);
 }

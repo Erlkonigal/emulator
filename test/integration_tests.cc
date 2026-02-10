@@ -62,7 +62,7 @@ TEST(integration_ram_rw) {
     ToyCpuExecutor* cpu = GetLastToyCpu();
     ASSERT_TRUE(cpu != nullptr);
     EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::Halt));
-    EXPECT_EQ(static_cast<uint32_t>(cpu->GetRegister(3) & 0xffffffffu), 0x11223344u);
+    EXPECT_EQ(static_cast<uint32_t>(cpu->getRegister(3) & 0xffffffffu), 0x11223344u);
 }
 
 TEST(integration_unmapped_fault) {

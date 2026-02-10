@@ -5,11 +5,8 @@
 #include <functional>
 #include <string>
 
-#include "emulator/bus/bus.h" // Will be moved later, but let's assume new path for now or keep relative?
-// Actually I need to update include paths everywhere.
-// For now let's use the old path "emulator/bus/bus.h" and I will update it later.
-// Or better, use the NEW path "emulator/bus/bus.h" and I will ensure bus.h is moved there.
-#include "emulator/cpu/cpu.h" // For MemResponse/MemAccess (defined in cpu.h currently)
+#include "emulator/bus/bus.h"
+#include "emulator/cpu/cpu.h"
 
 enum class DeviceType {
     Ram,
@@ -29,29 +26,29 @@ public:
     Device();
     virtual ~Device() = default;
 
-    MemResponse Read(const MemAccess& access);
-    MemResponse Write(const MemAccess& access);
-    void Tick(uint64_t cycles);
-    virtual void Sync(uint64_t currentCycle);
-    DeviceType GetType() const;
+    MemResponse read(const MemAccess& access);
+    MemResponse write(const MemAccess& access);
+    void tick(uint64_t cycles);
+    virtual void sync(uint64_t currentCycle);
+    DeviceType getType() const;
 
-    void SetReadHandler(ReadHandler handler);
-    void SetWriteHandler(WriteHandler handler);
-    void SetTickHandler(TickHandler handler);
-    void SetType(DeviceType type);
-    void SetSyncThreshold(uint64_t threshold);
+    void setReadHandler(ReadHandler handler);
+    void setWriteHandler(WriteHandler handler);
+    void setTickHandler(TickHandler handler);
+    void setType(DeviceType type);
+    void setSyncThreshold(uint64_t threshold);
     
-    virtual uint32_t GetUpdateFrequency() const { return 0; }
+    virtual uint32_t getUpdateFrequency() const { return 0; }
 
 protected:
-    uint64_t LastSyncCycle = 0;
-    uint64_t SyncThreshold = 128;
+    uint64_t mLastSyncCycle = 0;
+    uint64_t mSyncThreshold = 128;
 
 private:
-    ReadHandler ReadCallback;
-    WriteHandler WriteCallback;
-    TickHandler TickCallback;
-    DeviceType Type = DeviceType::Other;
+    ReadHandler mReadHandler;
+    WriteHandler mWriteHandler;
+    TickHandler mTickHandler;
+    DeviceType mType = DeviceType::Other;
 };
 
 #endif

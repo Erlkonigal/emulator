@@ -7,14 +7,14 @@ class TimerDevice : public Device {
 public:
     TimerDevice();
 
-    uint64_t GetCounterMicros();
+    uint64_t getCounterMicros();
 
 private:
-    uint64_t AccumulatedMicros = 0;
+    uint64_t mAccumulatedMicros = 0;
     
-    void HandleTick(uint64_t cycles);
-    MemResponse HandleRead(const MemAccess& access);
-    MemResponse HandleWrite(const MemAccess& access);
+    void handleTick(uint64_t cycles);
+    MemResponse handleRead(const MemAccess& access);
+    MemResponse handleWrite(const MemAccess& access);
 };
 
 #endif

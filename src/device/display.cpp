@@ -6,14 +6,14 @@
 #include <mutex>
 
 struct SdlDisplayDevice::SdlDisplayState {
-    SDL_Window* Window = nullptr;
-    SDL_Renderer* Renderer = nullptr;
-    SDL_Texture* Texture = nullptr;
-    uint32_t Width = 0;
-    uint32_t Height = 0;
-    uint8_t* FrameBuffer = nullptr;
-    bool Ready = false;
-    bool Headless = false;
+    SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
+    SDL_Texture* texture = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint8_t* frameBuffer = nullptr;
+    bool ready = false;
+    bool headless = false;
 };
 
 namespace {
@@ -33,237 +33,237 @@ constexpr uint32_t kKeyStatusReady = 1u << 0;
 }
 
 SdlDisplayDevice::SdlDisplayDevice()
-    : State(new SdlDisplayState()) {
-    SetType(DeviceType::Display);
-    SetReadHandler([this](const MemAccess& access) { return HandleRead(access); });
-    SetWriteHandler([this](const MemAccess& access) { return HandleWrite(access); });
+    : mState(new SdlDisplayState()) {
+    setType(DeviceType::Display);
+    setReadHandler([this](const MemAccess& access) { return handleRead(access); });
+    setWriteHandler([this](const MemAccess& access) { return handleWrite(access); });
 }
 
 SdlDisplayDevice::~SdlDisplayDevice() {
-    Shutdown();
-    delete State;
+    shutdown();
+    delete mState;
 }
 
-bool SdlDisplayDevice::Init(uint32_t width, uint32_t height, const char* title) {
-    if (State == nullptr || width == 0 || height == 0) {
+bool SdlDisplayDevice::init(uint32_t width, uint32_t height, const char* title) {
+    if (mState == nullptr || width == 0 || height == 0) {
         return false;
     }
-    Shutdown();
+    shutdown();
     if (SDL_WasInit(SDL_INIT_VIDEO) == 0) {
         if (SDL_Init(SDL_INIT_VIDEO) != 0) {
             return false;
         }
     }
-    State->Width = width;
-    State->Height = height;
-    State->Window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    mState->width = width;
+    mState->height = height;
+    mState->window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         static_cast<int>(width), static_cast<int>(height), SDL_WINDOW_SHOWN);
-    if (State->Window == nullptr) {
+    if (mState->window == nullptr) {
         return false;
     }
-    State->Renderer = SDL_CreateRenderer(State->Window, -1, SDL_RENDERER_ACCELERATED);
-    if (State->Renderer == nullptr) {
+    mState->renderer = SDL_CreateRenderer(mState->window, -1, SDL_RENDERER_ACCELERATED);
+    if (mState->renderer == nullptr) {
         return false;
     }
-    State->Texture = SDL_CreateTexture(State->Renderer, SDL_PIXELFORMAT_ARGB8888,
+    mState->texture = SDL_CreateTexture(mState->renderer, SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING, static_cast<int>(width), static_cast<int>(height));
-    if (State->Texture == nullptr) {
+    if (mState->texture == nullptr) {
         return false;
     }
-    State->FrameBuffer = new uint8_t[static_cast<size_t>(width) * height * 4];
-    std::memset(State->FrameBuffer, 0, static_cast<size_t>(width) * height * 4);
-    State->Ready = true;
-    State->Headless = false;
-    Dirty.store(true, std::memory_order_release);
+    mState->frameBuffer = new uint8_t[static_cast<size_t>(width) * height * 4];
+    std::memset(mState->frameBuffer, 0, static_cast<size_t>(width) * height * 4);
+    mState->ready = true;
+    mState->headless = false;
+    mDirty.store(true, std::memory_order_release);
     return true;
 }
 
-bool SdlDisplayDevice::InitHeadless(uint32_t width, uint32_t height) {
-    if (State == nullptr || width == 0 || height == 0) {
+bool SdlDisplayDevice::initHeadless(uint32_t width, uint32_t height) {
+    if (mState == nullptr || width == 0 || height == 0) {
         return false;
     }
-    Shutdown();
-    State->Width = width;
-    State->Height = height;
-    State->FrameBuffer = new uint8_t[static_cast<size_t>(width) * height * 4];
-    std::memset(State->FrameBuffer, 0, static_cast<size_t>(width) * height * 4);
-    State->Ready = true;
-    State->Headless = true;
-    Dirty.store(true, std::memory_order_release);
+    shutdown();
+    mState->width = width;
+    mState->height = height;
+    mState->frameBuffer = new uint8_t[static_cast<size_t>(width) * height * 4];
+    std::memset(mState->frameBuffer, 0, static_cast<size_t>(width) * height * 4);
+    mState->ready = true;
+    mState->headless = true;
+    mDirty.store(true, std::memory_order_release);
     return true;
 }
 
-void SdlDisplayDevice::Shutdown() {
-    if (State == nullptr) {
+void SdlDisplayDevice::shutdown() {
+    if (mState == nullptr) {
         return;
     }
-    State->Headless = false;
-    delete[] State->FrameBuffer;
-    State->FrameBuffer = nullptr;
-    if (State->Texture != nullptr) {
-        SDL_DestroyTexture(State->Texture);
-        State->Texture = nullptr;
+    mState->headless = false;
+    delete[] mState->frameBuffer;
+    mState->frameBuffer = nullptr;
+    if (mState->texture != nullptr) {
+        SDL_DestroyTexture(mState->texture);
+        mState->texture = nullptr;
     }
-    if (State->Renderer != nullptr) {
-        SDL_DestroyRenderer(State->Renderer);
-        State->Renderer = nullptr;
+    if (mState->renderer != nullptr) {
+        SDL_DestroyRenderer(mState->renderer);
+        mState->renderer = nullptr;
     }
-    if (State->Window != nullptr) {
-        SDL_DestroyWindow(State->Window);
-        State->Window = nullptr;
+    if (mState->window != nullptr) {
+        SDL_DestroyWindow(mState->window);
+        mState->window = nullptr;
     }
-    State->Width = 0;
-    State->Height = 0;
-    State->Ready = false;
-    Dirty.store(false, std::memory_order_release);
-    PresentRequested.store(false, std::memory_order_release);
+    mState->width = 0;
+    mState->height = 0;
+    mState->ready = false;
+    mDirty.store(false, std::memory_order_release);
+    mPresentRequested.store(false, std::memory_order_release);
 }
 
-bool SdlDisplayDevice::IsReady() const {
-    return State != nullptr && State->Ready;
+bool SdlDisplayDevice::isReady() const {
+    return mState != nullptr && mState->ready;
 }
 
-void SdlDisplayDevice::PollEvents(uint32_t timeoutMs) {
-    if (State == nullptr || !State->Ready) {
+void SdlDisplayDevice::pollEvents(uint32_t timeoutMs) {
+    if (mState == nullptr || !mState->ready) {
         return;
     }
-    if (State->Headless) {
+    if (mState->headless) {
         return;
     }
     SDL_Event event;
     if (timeoutMs > 0) {
         if (SDL_WaitEventTimeout(&event, static_cast<int>(timeoutMs)) != 0) {
-            std::lock_guard<std::mutex> lock(InputMutex);
+            std::lock_guard<std::mutex> lock(mInputMutex);
             if (event.type == SDL_QUIT) {
-                QuitRequested = true;
+                mQuitRequested = true;
             }
             if (event.type == SDL_KEYDOWN) {
-                LastKey = static_cast<uint32_t>(event.key.keysym.sym);
-                KeyQueue.push_back(LastKey);
+                mLastKey = static_cast<uint32_t>(event.key.keysym.sym);
+                mKeyQueue.push_back(mLastKey);
             }
         }
     }
     while (SDL_PollEvent(&event)) {
-        std::lock_guard<std::mutex> lock(InputMutex);
+        std::lock_guard<std::mutex> lock(mInputMutex);
         if (event.type == SDL_QUIT) {
-            QuitRequested = true;
+            mQuitRequested = true;
         }
         if (event.type == SDL_KEYDOWN) {
-            LastKey = static_cast<uint32_t>(event.key.keysym.sym);
-            KeyQueue.push_back(LastKey);
+            mLastKey = static_cast<uint32_t>(event.key.keysym.sym);
+            mKeyQueue.push_back(mLastKey);
         }
     }
 }
 
-bool SdlDisplayDevice::IsQuitRequested() const {
-    std::lock_guard<std::mutex> lock(InputMutex);
-    return QuitRequested;
+bool SdlDisplayDevice::isQuitRequested() const {
+    std::lock_guard<std::mutex> lock(mInputMutex);
+    return mQuitRequested;
 }
 
-void SdlDisplayDevice::PushKey(uint32_t key) {
-    std::lock_guard<std::mutex> lock(InputMutex);
-    LastKey = key;
-    KeyQueue.push_back(key);
+void SdlDisplayDevice::pushKey(uint32_t key) {
+    std::lock_guard<std::mutex> lock(mInputMutex);
+    mLastKey = key;
+    mKeyQueue.push_back(key);
 }
 
-uint32_t SdlDisplayDevice::GetWidth() const {
-    return State ? State->Width : 0;
+uint32_t SdlDisplayDevice::getWidth() const {
+    return mState ? mState->width : 0;
 }
 
-uint32_t SdlDisplayDevice::GetHeight() const {
-    return State ? State->Height : 0;
+uint32_t SdlDisplayDevice::getHeight() const {
+    return mState ? mState->height : 0;
 }
 
-uint32_t SdlDisplayDevice::GetPitch() const {
-    return State ? State->Width * 4u : 0u;
+uint32_t SdlDisplayDevice::getPitch() const {
+    return mState ? mState->width * 4u : 0u;
 }
 
-uint64_t SdlDisplayDevice::GetFrameBufferSize() const {
-    if (State == nullptr) {
+uint64_t SdlDisplayDevice::getFrameBufferSize() const {
+    if (mState == nullptr) {
         return 0;
     }
-    return static_cast<uint64_t>(State->Width) * State->Height * 4u;
+    return static_cast<uint64_t>(mState->width) * mState->height * 4u;
 }
 
-uint64_t SdlDisplayDevice::GetMappedSize() const {
-    return kFrameBufferOffset + GetFrameBufferSize();
+uint64_t SdlDisplayDevice::getMappedSize() const {
+    return kFrameBufferOffset + getFrameBufferSize();
 }
 
-bool SdlDisplayDevice::IsDirty() const {
-    return Dirty.load(std::memory_order_acquire);
+bool SdlDisplayDevice::isDirty() const {
+    return mDirty.load(std::memory_order_acquire);
 }
 
-bool SdlDisplayDevice::IsPresentRequested() const {
-    return PresentRequested.load(std::memory_order_acquire);
+bool SdlDisplayDevice::isPresentRequested() const {
+    return mPresentRequested.load(std::memory_order_acquire);
 }
 
-bool SdlDisplayDevice::ConsumePresentRequest() {
-    return PresentRequested.exchange(false, std::memory_order_acq_rel);
+bool SdlDisplayDevice::consumePresentRequest() {
+    return mPresentRequested.exchange(false, std::memory_order_acq_rel);
 }
 
-void SdlDisplayDevice::Present() {
-    if (State == nullptr || !State->Ready) {
+void SdlDisplayDevice::present() {
+    if (mState == nullptr || !mState->ready) {
         return;
     }
-    if (State->Headless) {
-        Dirty.store(false, std::memory_order_release);
+    if (mState->headless) {
+        mDirty.store(false, std::memory_order_release);
         return;
     }
-    std::lock_guard<std::mutex> lock(FrameMutex);
-    SDL_UpdateTexture(State->Texture, nullptr, State->FrameBuffer,
-        static_cast<int>(State->Width) * 4);
-    SDL_RenderClear(State->Renderer);
-    SDL_RenderCopy(State->Renderer, State->Texture, nullptr, nullptr);
-    SDL_RenderPresent(State->Renderer);
-    Dirty.store(false, std::memory_order_release);
+    std::lock_guard<std::mutex> lock(mFrameMutex);
+    SDL_UpdateTexture(mState->texture, nullptr, mState->frameBuffer,
+        static_cast<int>(mState->width) * 4);
+    SDL_RenderClear(mState->renderer);
+    SDL_RenderCopy(mState->renderer, mState->texture, nullptr, nullptr);
+    SDL_RenderPresent(mState->renderer);
+    mDirty.store(false, std::memory_order_release);
 }
 
-uint32_t SdlDisplayDevice::GetUpdateFrequency() const {
+uint32_t SdlDisplayDevice::getUpdateFrequency() const {
     return 60;
 }
 
-bool SdlDisplayDevice::ReadRegister(uint64_t offset, uint64_t* value) {
+bool SdlDisplayDevice::readRegister(uint64_t offset, uint64_t* value) {
     if (value == nullptr) {
         return false;
     }
     if (offset == kRegKeyData) {
-        std::lock_guard<std::mutex> lock(InputMutex);
-        if (KeyQueue.empty()) {
+        std::lock_guard<std::mutex> lock(mInputMutex);
+        if (mKeyQueue.empty()) {
             *value = 0;
             return true;
         }
-        *value = KeyQueue.front();
-        KeyQueue.pop_front();
+        *value = mKeyQueue.front();
+        mKeyQueue.pop_front();
         return true;
     }
     if (offset == kRegKeyStatus) {
-        std::lock_guard<std::mutex> lock(InputMutex);
-        *value = KeyQueue.empty() ? 0u : kKeyStatusReady;
+        std::lock_guard<std::mutex> lock(mInputMutex);
+        *value = mKeyQueue.empty() ? 0u : kKeyStatusReady;
         return true;
     }
     if (offset == kRegKeyLast) {
-        std::lock_guard<std::mutex> lock(InputMutex);
-        *value = LastKey;
+        std::lock_guard<std::mutex> lock(mInputMutex);
+        *value = mLastKey;
         return true;
     }
     if (offset == kRegWidth) {
-        *value = GetWidth();
+        *value = getWidth();
         return true;
     }
     if (offset == kRegHeight) {
-        *value = GetHeight();
+        *value = getHeight();
         return true;
     }
     if (offset == kRegPitch) {
-        *value = GetPitch();
+        *value = getPitch();
         return true;
     }
     if (offset == kRegStatus) {
         uint64_t status = 0;
-        if (IsReady()) {
+        if (isReady()) {
             status |= kStatusReady;
         }
-        if (Dirty.load(std::memory_order_acquire)) {
+        if (mDirty.load(std::memory_order_acquire)) {
             status |= kStatusDirty;
         }
         *value = status;
@@ -272,102 +272,102 @@ bool SdlDisplayDevice::ReadRegister(uint64_t offset, uint64_t* value) {
     return false;
 }
 
-bool SdlDisplayDevice::WriteRegister(uint64_t offset, uint64_t value) {
+bool SdlDisplayDevice::writeRegister(uint64_t offset, uint64_t value) {
     if (offset == kRegCtrl) {
         if ((value & 1u) != 0) {
-            PresentRequested.store(true, std::memory_order_release);
+            mPresentRequested.store(true, std::memory_order_release);
         }
         return true;
     }
     if (offset == kRegKeyStatus) {
-        std::lock_guard<std::mutex> lock(InputMutex);
+        std::lock_guard<std::mutex> lock(mInputMutex);
         (void)value;
-        KeyQueue.clear();
-        LastKey = 0;
+        mKeyQueue.clear();
+        mLastKey = 0;
         return true;
     }
     return false;
 }
 
-MemResponse SdlDisplayDevice::HandleRead(const MemAccess& access) {
+MemResponse SdlDisplayDevice::handleRead(const MemAccess& access) {
     MemResponse response;
-    if (State == nullptr || access.Size == 0 || access.Size > sizeof(uint64_t)) {
-        response.Success = false;
-        response.Error.Type = CpuErrorType::AccessFault;
-        response.Error.Address = access.Address;
-        response.Error.Size = access.Size;
+    if (mState == nullptr || access.size == 0 || access.size > sizeof(uint64_t)) {
+        response.success = false;
+        response.error.type = CpuErrorType::AccessFault;
+        response.error.address = access.address;
+        response.error.size = access.size;
         return response;
     }
-    uint64_t mappedSize = GetMappedSize();
-    if (access.Address >= mappedSize || access.Address > mappedSize - access.Size) {
-        response.Success = false;
-        response.Error.Type = CpuErrorType::AccessFault;
-        response.Error.Address = access.Address;
-        response.Error.Size = access.Size;
+    uint64_t mappedSize = getMappedSize();
+    if (access.address >= mappedSize || access.address > mappedSize - access.size) {
+        response.success = false;
+        response.error.type = CpuErrorType::AccessFault;
+        response.error.address = access.address;
+        response.error.size = access.size;
         return response;
     }
-    if (access.Address < kFrameBufferOffset) {
+    if (access.address < kFrameBufferOffset) {
         uint64_t value = 0;
-        if (!ReadRegister(access.Address, &value)) {
-            response.Success = false;
-            response.Error.Type = CpuErrorType::AccessFault;
-            response.Error.Address = access.Address;
-            response.Error.Size = access.Size;
+        if (!readRegister(access.address, &value)) {
+            response.success = false;
+            response.error.type = CpuErrorType::AccessFault;
+            response.error.address = access.address;
+            response.error.size = access.size;
             return response;
         }
-        response.Success = true;
-        response.Data = value;
+        response.success = true;
+        response.data = value;
         return response;
     }
-    uint64_t fbOffset = access.Address - kFrameBufferOffset;
-    std::lock_guard<std::mutex> lock(FrameMutex);
+    uint64_t fbOffset = access.address - kFrameBufferOffset;
+    std::lock_guard<std::mutex> lock(mFrameMutex);
     uint64_t value = 0;
-    for (uint32_t i = 0; i < access.Size; ++i) {
-        value |= static_cast<uint64_t>(State->FrameBuffer[static_cast<size_t>(fbOffset + i)])
+    for (uint32_t i = 0; i < access.size; ++i) {
+        value |= static_cast<uint64_t>(mState->frameBuffer[static_cast<size_t>(fbOffset + i)])
             << (8 * i);
     }
-    response.Success = true;
-    response.Data = value;
+    response.success = true;
+    response.data = value;
     return response;
 }
 
-MemResponse SdlDisplayDevice::HandleWrite(const MemAccess& access) {
+MemResponse SdlDisplayDevice::handleWrite(const MemAccess& access) {
     MemResponse response;
-    if (State == nullptr || access.Size == 0 || access.Size > sizeof(uint64_t)) {
-        response.Success = false;
-        response.Error.Type = CpuErrorType::AccessFault;
-        response.Error.Address = access.Address;
-        response.Error.Size = access.Size;
+    if (mState == nullptr || access.size == 0 || access.size > sizeof(uint64_t)) {
+        response.success = false;
+        response.error.type = CpuErrorType::AccessFault;
+        response.error.address = access.address;
+        response.error.size = access.size;
         return response;
     }
-    uint64_t mappedSize = GetMappedSize();
-    if (access.Address >= mappedSize || access.Address > mappedSize - access.Size) {
-        response.Success = false;
-        response.Error.Type = CpuErrorType::AccessFault;
-        response.Error.Address = access.Address;
-        response.Error.Size = access.Size;
+    uint64_t mappedSize = getMappedSize();
+    if (access.address >= mappedSize || access.address > mappedSize - access.size) {
+        response.success = false;
+        response.error.type = CpuErrorType::AccessFault;
+        response.error.address = access.address;
+        response.error.size = access.size;
         return response;
     }
-    if (access.Address < kFrameBufferOffset) {
-        if (!WriteRegister(access.Address, access.Data)) {
-            response.Success = false;
-            response.Error.Type = CpuErrorType::AccessFault;
-            response.Error.Address = access.Address;
-            response.Error.Size = access.Size;
+    if (access.address < kFrameBufferOffset) {
+        if (!writeRegister(access.address, access.data)) {
+            response.success = false;
+            response.error.type = CpuErrorType::AccessFault;
+            response.error.address = access.address;
+            response.error.size = access.size;
             return response;
         }
-        response.Success = true;
+        response.success = true;
         return response;
     }
-    uint64_t fbOffset = access.Address - kFrameBufferOffset;
-    std::lock_guard<std::mutex> lock(FrameMutex);
-    uint64_t value = access.Data;
-    for (uint32_t i = 0; i < access.Size; ++i) {
-        State->FrameBuffer[static_cast<size_t>(fbOffset + i)] =
+    uint64_t fbOffset = access.address - kFrameBufferOffset;
+    std::lock_guard<std::mutex> lock(mFrameMutex);
+    uint64_t value = access.data;
+    for (uint32_t i = 0; i < access.size; ++i) {
+        mState->frameBuffer[static_cast<size_t>(fbOffset + i)] =
             static_cast<uint8_t>(value & 0xff);
         value >>= 8;
     }
-    Dirty.store(true, std::memory_order_release);
-    response.Success = true;
+    mDirty.store(true, std::memory_order_release);
+    response.success = true;
     return response;
 }

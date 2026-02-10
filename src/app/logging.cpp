@@ -8,35 +8,35 @@
 namespace {
 
 struct LogOutput {
-    FILE* File = nullptr;
-    bool OwnsFile = false;
+    FILE* file = nullptr;
+    bool ownsFile = false;
     
-    void Close() {
-        if (OwnsFile && File != nullptr && File != stdout && File != stderr) {
-            std::fclose(File);
+    void close() {
+        if (ownsFile && file != nullptr && file != stdout && file != stderr) {
+            std::fclose(file);
         }
-        File = nullptr;
-        OwnsFile = false;
+        file = nullptr;
+        ownsFile = false;
     }
     
-    void Open(const std::string& filename, FILE* defaultFile) {
-        Close();
+    void open(const std::string& filename, FILE* defaultFile) {
+        close();
         if (filename.empty()) {
-            File = defaultFile;
-            OwnsFile = false;
+            file = defaultFile;
+            ownsFile = false;
         } else if (filename == "stdout") {
-            File = stdout;
-            OwnsFile = false;
+            file = stdout;
+            ownsFile = false;
         } else if (filename == "stderr") {
-            File = stderr;
-            OwnsFile = false;
+            file = stderr;
+            ownsFile = false;
         } else {
-            File = std::fopen(filename.c_str(), "w");
-            if (File) {
-                OwnsFile = true;
+            file = std::fopen(filename.c_str(), "w");
+            if (file) {
+                ownsFile = true;
             } else {
                 std::fprintf(stderr, "Failed to open log file: %s\n", filename.c_str());
-                File = defaultFile;
+                file = defaultFile;
             }
         }
     }
@@ -44,92 +44,87 @@ struct LogOutput {
 
 class LogState {
 public:
-    std::mutex Mutex;
-    LogOutput Device;  // For device output (UART, etc.) - like stdout
-    LogOutput Log;     // For log messages - like stderr
-    LogLevel Level = LogLevel::Info;
-    std::function<void(const char*)> OutputHandler;
-    bool DualMode = false;
+    std::mutex mutex;
+    LogOutput device;
+    LogOutput log;
+    LogLevel level = LogLevel::Info;
+    std::function<void(const char*)> outputHandler;
+    bool dualMode = false;
     
-    void Reset() {
-        Device.Close();
-        Log.Close();
-        DualMode = false;
+    void reset() {
+        device.close();
+        log.close();
+        dualMode = false;
     }
     
-    void Initialize(const LogConfig& config) {
-        std::lock_guard<std::mutex> lock(Mutex);
-        Reset();
+    void initialize(const LogConfig& config) {
+        std::lock_guard<std::mutex> lock(mutex);
+        reset();
         
-        Level = config.Level;
-        DualMode = config.IsDualOutput();
+        level = config.level;
+        dualMode = config.isDualOutput();
         
-        // If no specific outputs configured, both go to stderr (original behavior)
-        if (!DualMode) {
-            if (config.LogOutput.empty()) {
-                Device.Open("", stdout);
-                Log.Open("", stderr);
+        if (!dualMode) {
+            if (config.logOutput.empty()) {
+                device.open("", stdout);
+                log.open("", stderr);
             } else {
-                // Both outputs go to the same file
-                Device.Open(config.LogOutput, stdout);
-                Log.File = Device.File;
-                Log.OwnsFile = false;  // Only one owner
+                device.open(config.logOutput, stdout);
+                log.file = device.file;
+                log.ownsFile = false;
             }
         } else {
-            // Dual mode: separate outputs
-            Device.Open(config.DeviceOutput, stdout);
-            Log.Open(config.LogOutput, stderr);
+            device.open(config.deviceOutput, stdout);
+            log.open(config.logOutput, stderr);
         }
     }
     
-    void Write(FILE* file, const char* str) {
-        if (OutputHandler) {
-            OutputHandler(str);
-        } else if (file) {
-            std::fprintf(file, "%s", str);
-            std::fflush(file);
+    void write(FILE* f, const char* str) {
+        if (outputHandler) {
+            outputHandler(str);
+        } else if (f) {
+            std::fprintf(f, "%s", str);
+            std::fflush(f);
         }
     }
     
-    void WriteLine(FILE* file, const char* str) {
-        if (OutputHandler) {
-            OutputHandler(str);
-        } else if (file) {
-            std::fprintf(file, "%s\n", str);
-            std::fflush(file);
+    void writeLine(FILE* f, const char* str) {
+        if (outputHandler) {
+            outputHandler(str);
+        } else if (f) {
+            std::fprintf(f, "%s\n", str);
+            std::fflush(f);
         }
     }
 };
 
-LogState g_State;
+LogState gState;
 
 } // namespace
 
-void LogInit(const LogConfig& config) {
-    g_State.Initialize(config);
+void logInit(const LogConfig& config) {
+    gState.initialize(config);
 }
 
-void LogSetLevel(LogLevel level) {
-    std::lock_guard<std::mutex> lock(g_State.Mutex);
-    g_State.Level = level;
+void logSetLevel(LogLevel level) {
+    std::lock_guard<std::mutex> lock(gState.mutex);
+    gState.level = level;
 }
 
-void LogSetOutputHandler(std::function<void(const char*)> handler) {
-    std::lock_guard<std::mutex> lock(g_State.Mutex);
-    g_State.OutputHandler = std::move(handler);
+void logSetOutputHandler(std::function<void(const char*)> handler) {
+    std::lock_guard<std::mutex> lock(gState.mutex);
+    gState.outputHandler = std::move(handler);
 }
 
-void LogMessage(LogLevel level, const char* file, int line, const char* fmt, ...) {
-    if (level < g_State.Level) return;
+void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...) {
+    if (level < gState.level) return;
 
-    std::lock_guard<std::mutex> lock(g_State.Mutex);
+    std::lock_guard<std::mutex> lock(gState.mutex);
     
-    // Time
     std::time_t now = std::time(nullptr);
     char timeBuf[64];
     std::strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S", std::localtime(&now));
 
-    // Level
     const char* levelStr = "INFO";
     switch (level) {
         case LogLevel::Trace: levelStr = "TRACE"; break;
@@ -139,7 +134,6 @@ void LogMessage(LogLevel level, const char* file, int line, const char* fmt, ...
         case LogLevel::Error: levelStr = "ERROR"; break;
     }
 
-    // Determine short filename
     const char* shortFile = file;
     for (const char* p = file; *p; ++p) {
         if (*p == '/' || *p == '\\') {
@@ -158,11 +152,11 @@ void LogMessage(LogLevel level, const char* file, int line, const char* fmt, ...
     }
     buffer[sizeof(buffer) - 1] = '\0';
 
-    g_State.WriteLine(g_State.Log.File, buffer);
+    gState.writeLine(gState.log.file, buffer);
 }
 
-void LogPrint(const char* fmt, ...) {
-    std::lock_guard<std::mutex> lock(g_State.Mutex);
+void logPrint(const char* fmt, ...) {
+    std::lock_guard<std::mutex> lock(gState.mutex);
 
     char buffer[4096];
     va_list args;
@@ -171,11 +165,11 @@ void LogPrint(const char* fmt, ...) {
     va_end(args);
     buffer[sizeof(buffer) - 1] = '\0';
 
-    g_State.Write(g_State.Log.File, buffer);
+    gState.write(gState.log.file, buffer);
 }
 
-void LogDevicePrint(const char* fmt, ...) {
-    std::lock_guard<std::mutex> lock(g_State.Mutex);
+void logDevicePrint(const char* fmt, ...) {
+    std::lock_guard<std::mutex> lock(gState.mutex);
 
     char buffer[4096];
     va_list args;
@@ -184,5 +178,5 @@ void LogDevicePrint(const char* fmt, ...) {
     va_end(args);
     buffer[sizeof(buffer) - 1] = '\0';
 
-    g_State.Write(g_State.Device.File, buffer);
+    gState.write(gState.device.file, buffer);
 }

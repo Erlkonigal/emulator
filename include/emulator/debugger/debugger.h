@@ -17,14 +17,14 @@ class Terminal;
 enum class FocusPanel;
 
 struct CpuControl {
-    std::mutex Mutex;
-    std::condition_variable Cv;
+    std::mutex mutex;
+    std::condition_variable cv;
 };
 
 struct EmulatorRunState {
-    std::atomic<CpuState> State{CpuState::Pause};
-    std::atomic<bool> ShouldExit{false};
-    std::atomic<uint32_t> StepsPending{0};
+    std::atomic<CpuState> state{CpuState::Pause};
+    std::atomic<bool> shouldExit{false};
+    std::atomic<uint32_t> stepsPending{0};
 };
 
 class Debugger : public ICpuDebugger {
@@ -32,83 +32,83 @@ public:
     Debugger(ICpuExecutor* cpu, MemoryBus* bus);
     ~Debugger() override;
 
-    void SetSdl(SdlDisplayDevice* sdl);
-    void Run(bool interactive);
+    void setSdl(SdlDisplayDevice* sdl);
+    void run(bool interactive);
 
-    MemResponse BusRead(const MemAccess& access) override;
-    MemResponse BusWrite(const MemAccess& access) override;
-    uint64_t GetCpuCycle();
+    MemResponse busRead(const MemAccess& access) override;
+    MemResponse busWrite(const MemAccess& access) override;
+    uint64_t getCpuCycle();
 
-    std::vector<uint8_t> ScanMemory(uint64_t address, uint32_t length);
-    std::vector<uint64_t> ReadRegisters();
-    void PrintRegisters();
-    uint64_t EvalExpression(const std::string& expression);
-    void AddBreakpoint(uint64_t address);
-    void RemoveBreakpoint(uint64_t address);
-    bool IsBreakpoint(uint64_t address) override;
-    bool HasBreakpoints() override;
-    bool ProcessCommand(const std::string& command);
+    std::vector<uint8_t> scanMemory(uint64_t address, uint32_t length);
+    std::vector<uint64_t> readRegisters();
+    void printRegisters();
+    uint64_t evalExpression(const std::string& expression);
+    void addBreakpoint(uint64_t address);
+    void removeBreakpoint(uint64_t address);
+    bool isBreakpoint(uint64_t address) override;
+    bool hasBreakpoints() override;
+    bool processCommand(const std::string& command);
 
-    void SetRegisterCount(uint32_t count);
-    void SetCpuFrequency(uint32_t cpuFreq);
+    void setRegisterCount(uint32_t count);
+    void setCpuFrequency(uint32_t cpuFreq);
 
-    void ConfigureTrace(const TraceOptions& options) override;
-    void SetTraceFormatter(TraceFormatter formatter) override;
-    void LogTrace(const TraceRecord& record) override;
-    const TraceOptions& GetTraceOptions() const override;
+    void configureTrace(const TraceOptions& options) override;
+    void setTraceFormatter(TraceFormatter formatter) override;
+    void logTrace(const TraceRecord& record) override;
+    const TraceOptions& getTraceOptions() const override;
 
 private:
-    ICpuExecutor* Cpu = nullptr;
-    MemoryBus* Bus = nullptr;
-    SdlDisplayDevice* Sdl = nullptr;
-    uint32_t RegisterCount = 0;
-    uint32_t CpuFrequency = 1000000;
-    uint32_t SyncThresholdCycles = 1000;
-    std::vector<uint64_t> Breakpoints;
-    std::mutex Mutex;
+    ICpuExecutor* mCpu = nullptr;
+    MemoryBus* mBus = nullptr;
+    SdlDisplayDevice* mSdl = nullptr;
+    uint32_t mRegisterCount = 0;
+    uint32_t mCpuFrequency = 1000000;
+    uint32_t mSyncThresholdCycles = 1000;
+    std::vector<uint64_t> mBreakpoints;
+    std::mutex mMutex;
 
-    EmulatorRunState State;
-    CpuControl Control;
-    bool IsInteractive = false;
+    EmulatorRunState mState;
+    CpuControl mControl;
+    bool mIsInteractive = false;
 
     struct CommandEntry {
-        std::string Name;
-        std::string Help;
+        std::string name;
+        std::string help;
         bool (Debugger::*Handler)(std::istringstream&);
     };
-    std::vector<CommandEntry> Commands;
-    void RegisterCommands();
+    std::vector<CommandEntry> mCommands;
+    void registerCommands();
 
-    void CpuThreadLoop();
-    void SdlThreadLoop();
-    void InputLoop();
+    void cpuThreadLoop();
+    void sdlThreadLoop();
+    void inputLoop();
 
-    void SetupUart();
-    void SetupLogging();
+    void setupUart();
+    void setupLogging();
 
-    bool CmdRun(std::istringstream& args);
-    bool CmdStep(std::istringstream& args);
-    bool CmdPause(std::istringstream& args);
-    bool CmdQuit(std::istringstream& args);
-    bool CmdRegs(std::istringstream& args);
-    bool CmdMem(std::istringstream& args);
-    bool CmdEval(std::istringstream& args);
-    bool CmdBp(std::istringstream& args);
-    bool CmdLog(std::istringstream& args);
-    bool CmdHelp(std::istringstream& args);
+    bool cmdRun(std::istringstream& args);
+    bool cmdStep(std::istringstream& args);
+    bool cmdPause(std::istringstream& args);
+    bool cmdQuit(std::istringstream& args);
+    bool cmdRegs(std::istringstream& args);
+    bool cmdMem(std::istringstream& args);
+    bool cmdEval(std::istringstream& args);
+    bool cmdBp(std::istringstream& args);
+    bool cmdLog(std::istringstream& args);
+    bool cmdHelp(std::istringstream& args);
 
-    void UpdateStatusDisplay();
+    void updateStatusDisplay();
 
-    std::unique_ptr<Terminal> m_Terminal;
-    std::atomic<uint64_t> m_TotalInstructions{0};
-    bool m_LastStepSuccess = true;
+    std::unique_ptr<Terminal> mTerminal;
+    std::atomic<uint64_t> mTotalInstructions{0};
+    bool mLastCommandSuccess = true;
 
-    TraceOptions m_TraceOptions;
-    TraceFormatter m_TraceFormatter;
+    TraceOptions mTraceOptions;
+    TraceFormatter mTraceFormatter;
 
-    std::atomic<double> m_CurrentCPS{0.0};
-    std::chrono::steady_clock::time_point m_LastCpsTime;
-    uint64_t m_LastCpsCycles = 0;
+    std::atomic<double> mCurrentCPS{0.0};
+    std::chrono::steady_clock::time_point mLastCpsTime;
+    uint64_t mLastCpsCycles = 0;
 };
 
 #endif

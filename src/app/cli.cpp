@@ -5,7 +5,7 @@
 #include <limits>
 #include <string>
 
-void PrintUsage(const char* exe) {
+void printUsage(const char* exe) {
     const char* name = (exe != nullptr) ? exe : "emulator";
     std::fprintf(stdout,
         "Usage: %s --rom <path> [options]\n"
@@ -31,7 +31,7 @@ void PrintUsage(const char* exe) {
         name);
 }
 
-bool FindConfigPath(int argc, char** argv, EmulatorConfig* config, bool* required,
+bool findConfigPath(int argc, char** argv, EmulatorConfig* config, bool* required,
     std::string* error) {
     if (config == nullptr || required == nullptr) {
         return false;
@@ -40,15 +40,15 @@ bool FindConfigPath(int argc, char** argv, EmulatorConfig* config, bool* require
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
-            config->ShowHelp = true;
+            config->showHelp = true;
             continue;
         }
         if (arg == "--config") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--config", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--config", &value, error)) {
                 return false;
             }
-            config->ConfigPath = value;
+            config->configPath = value;
             *required = true;
             continue;
         }
@@ -56,144 +56,144 @@ bool FindConfigPath(int argc, char** argv, EmulatorConfig* config, bool* require
     return true;
 }
 
-bool ParseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error) {
+bool parseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error) {
     if (config == nullptr) {
         return false;
     }
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
-            config->ShowHelp = true;
+            config->showHelp = true;
             continue;
         }
         if (arg == "--config") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--config", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--config", &value, error)) {
                 return false;
             }
-            config->ConfigPath = value;
+            config->configPath = value;
             continue;
         }
         if (arg == "--rom") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--rom", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--rom", &value, error)) {
                 return false;
             }
-            config->RomPath = value;
+            config->romPath = value;
             continue;
         }
         if (arg == "--debug") {
-            config->Debug = true;
+            config->debug = true;
             continue;
         }
         if (arg == "--width") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--width", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--width", &value, error)) {
                 return false;
             }
-            if (!ParseU32Arg("width", value, &config->Width, error)) {
+            if (!parseU32Arg("width", value, &config->width, error)) {
                 return false;
             }
             continue;
         }
         if (arg == "--height") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--height", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--height", &value, error)) {
                 return false;
             }
-            if (!ParseU32Arg("height", value, &config->Height, error)) {
+            if (!parseU32Arg("height", value, &config->height, error)) {
                 return false;
             }
             continue;
         }
         if (arg == "--sdl-base") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--sdl-base", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--sdl-base", &value, error)) {
                 return false;
             }
-            if (!ParseU64Arg("sdl-base", value, &config->SdlBase, error)) {
+            if (!parseU64Arg("sdl-base", value, &config->sdlBase, error)) {
                 return false;
             }
             continue;
         }
         if (arg == "--ram-base") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--ram-base", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--ram-base", &value, error)) {
                 return false;
             }
-            if (!ParseU64Arg("ram-base", value, &config->RamBase, error)) {
+            if (!parseU64Arg("ram-base", value, &config->ramBase, error)) {
                 return false;
             }
             continue;
         }
         if (arg == "--ram-size") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--ram-size", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--ram-size", &value, error)) {
                 return false;
             }
-            if (!ParseU64Arg("ram-size", value, &config->RamSize, error)) {
+            if (!parseU64Arg("ram-size", value, &config->ramSize, error)) {
                 return false;
             }
             continue;
         }
         if (arg == "--uart-base") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--uart-base", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--uart-base", &value, error)) {
                 return false;
             }
-            if (!ParseU64Arg("uart-base", value, &config->UartBase, error)) {
+            if (!parseU64Arg("uart-base", value, &config->uartBase, error)) {
                 return false;
             }
             continue;
         }
         if (arg == "--timer-base") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--timer-base", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--timer-base", &value, error)) {
                 return false;
             }
-            if (!ParseU64Arg("timer-base", value, &config->TimerBase, error)) {
+            if (!parseU64Arg("timer-base", value, &config->timerBase, error)) {
                 return false;
             }
             continue;
         }
         if (arg == "--title") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--title", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--title", &value, error)) {
                 return false;
             }
-            config->WindowTitle = value;
+            config->windowTitle = value;
             continue;
         }
         if (arg == "--itrace") {
-            config->ITrace = true;
+            config->iTrace = true;
             continue;
         }
         if (arg == "--mtrace") {
-            config->MTrace = true;
+            config->mTrace = true;
             continue;
         }
         if (arg == "--bptrace") {
-            config->BPTrace = true;
+            config->bpTrace = true;
             continue;
         }
         if (arg == "--log-level") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--log-level", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--log-level", &value, error)) {
                 return false;
             }
-            config->LogLevel = value;
+            config->logLevel = value;
             continue;
         }
         if (arg == "--log-filename") {
             std::string value;
-            if (!RequireArgValue(argc, argv, &i, "--log-filename", &value, error)) {
+            if (!requireArgValue(argc, argv, &i, "--log-filename", &value, error)) {
                 return false;
             }
-            config->LogFilename = value;
+            config->logFilename = value;
             continue;
         }
         if (arg == "--enable-log") {
-            config->EnableLog = true;
+            config->enableLog = true;
             continue;
         }
         if (!arg.empty() && arg[0] == '-') {
@@ -202,8 +202,8 @@ bool ParseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error
             }
             return false;
         }
-        if (config->RomPath.empty()) {
-            config->RomPath = std::string(arg);
+        if (config->romPath.empty()) {
+            config->romPath = std::string(arg);
             continue;
         }
         if (error != nullptr) {

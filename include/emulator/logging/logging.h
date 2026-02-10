@@ -14,26 +14,26 @@ enum class LogLevel {
 };
 
 struct LogConfig {
-    LogLevel Level = LogLevel::Info;
-    std::string DeviceOutput;  // Device output file (empty = stdout)
-    std::string LogOutput;     // Log/error output file (empty = stderr)
+    LogLevel level = LogLevel::Info;
+    std::string deviceOutput;
+    std::string logOutput;
     
-    bool IsDualOutput() const {
-        return !DeviceOutput.empty() || !LogOutput.empty();
+    bool isDualOutput() const {
+        return !deviceOutput.empty() || !logOutput.empty();
     }
 };
 
-void LogInit(const LogConfig& config);
-void LogSetLevel(LogLevel level);
-void LogSetOutputHandler(std::function<void(const char*)> handler);
-void LogMessage(LogLevel level, const char* file, int line, const char* fmt, ...);
-void LogPrint(const char* fmt, ...);
-void LogDevicePrint(const char* fmt, ...);
+void logInit(const LogConfig& config);
+void logSetLevel(LogLevel level);
+void logSetOutputHandler(std::function<void(const char*)> handler);
+void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...);
+void logPrint(const char* fmt, ...);
+void logDevicePrint(const char* fmt, ...);
 
-#define LOG_TRACE(...) LogMessage(LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_DEBUG(...) LogMessage(LogLevel::Debug, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_INFO(...)  LogMessage(LogLevel::Info,  __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_WARN(...)  LogMessage(LogLevel::Warn,  __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_ERROR(...) LogMessage(LogLevel::Error, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_TRACE(...) logMessage(LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_DEBUG(...) logMessage(LogLevel::Debug, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_INFO(...)  logMessage(LogLevel::Info,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_WARN(...)  logMessage(LogLevel::Warn,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_ERROR(...) logMessage(LogLevel::Error, __FILE__, __LINE__, __VA_ARGS__)
 
 #endif

@@ -23,39 +23,38 @@ constexpr uint32_t kDefaultWidth = 640;
 constexpr uint32_t kDefaultHeight = 480;
 
 struct EmulatorConfig {
-    std::string RomPath;
-    std::string ConfigPath = "emulator.conf";
-    std::string WindowTitle = "Emulator";
-    uint64_t RomBase = kDefaultRomBase;
-    uint64_t RamBase = kDefaultRamBase;
-    uint64_t RamSize = kDefaultRamSize;
-    uint64_t UartBase = kDefaultUartBase;
-    uint64_t TimerBase = kDefaultTimerBase;
-    uint64_t SdlBase = kDefaultSdlBase;
-    uint32_t Width = kDefaultWidth;
-    uint32_t Height = kDefaultHeight;
-    uint32_t CpuFrequency = 1000000;
-    bool Debug = false;
-    bool ShowHelp = false;
+    std::string romPath;
+    std::string configPath = "emulator.conf";
+    std::string windowTitle = "Emulator";
+    uint64_t romBase = kDefaultRomBase;
+    uint64_t ramBase = kDefaultRamBase;
+    uint64_t ramSize = kDefaultRamSize;
+    uint64_t uartBase = kDefaultUartBase;
+    uint64_t timerBase = kDefaultTimerBase;
+    uint64_t sdlBase = kDefaultSdlBase;
+    uint32_t width = kDefaultWidth;
+    uint32_t height = kDefaultHeight;
+    uint32_t cpuFrequency = 1000000;
+    bool debug = false;
+    bool showHelp = false;
 
-    // Trace & Logging
-    bool ITrace = false;
-    bool MTrace = false;
-    bool BPTrace = false;
-    std::string LogLevel = "info";
-    std::string LogFilename = "";
-    bool EnableLog = false;
+    bool iTrace = false;
+    bool mTrace = false;
+    bool bpTrace = false;
+    std::string logLevel = "info";
+    std::string logFilename = "";
+    bool enableLog = false;
 };
 
-bool LoadConfigFile(const std::string& path, bool required, EmulatorConfig* config,
+bool loadConfigFile(const std::string& path, bool required, EmulatorConfig* config,
     std::string* error);
 
-void PrintUsage(const char* exe);
-bool FindConfigPath(int argc, char** argv, EmulatorConfig* config, bool* required,
+void printUsage(const char* exe);
+bool findConfigPath(int argc, char** argv, EmulatorConfig* config, bool* required,
     std::string* error);
-bool ParseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error);
+bool parseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error);
 
-bool ValidateMappings(const std::vector<MemoryRegion>& mappings, std::string* error);
+bool validateMappings(const std::vector<MemoryRegion>& mappings, std::string* error);
 
 class ICpuExecutor;
 class TimerDevice;

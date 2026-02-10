@@ -28,8 +28,8 @@ extern "C" ICpuExecutor* CreateCpuExecutor();
 
 namespace {
 
-LogLevel ParseLogLevel(const std::string& levelStr) {
-    std::string s = ToLower(levelStr);
+LogLevel parseLogLevel(const std::string& levelStr) {
+    std::string s = toLower(levelStr);
     if (s == "trace") return LogLevel::Trace;
     if (s == "debug") return LogLevel::Debug;
     if (s == "info") return LogLevel::Info;
@@ -44,66 +44,63 @@ int RunEmulator(int argc, char** argv) {
     EmulatorConfig config;
     bool configRequired = false;
     std::string error;
-    if (!FindConfigPath(argc, argv, &config, &configRequired, &error)) {
+    if (!findConfigPath(argc, argv, &config, &configRequired, &error)) {
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
-    if (config.ShowHelp) {
-        PrintUsage(argv[0]);
+    if (config.showHelp) {
+        printUsage(argv[0]);
         return 0;
     }
-    if (!LoadConfigFile(config.ConfigPath, configRequired, &config, &error)) {
+    if (!loadConfigFile(config.configPath, configRequired, &config, &error)) {
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
-    if (!ParseArgs(argc, argv, &config, &error)) {
+    if (!parseArgs(argc, argv, &config, &error)) {
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
-    if (config.ShowHelp) {
-        PrintUsage(argv[0]);
+    if (config.showHelp) {
+        printUsage(argv[0]);
         return 0;
     }
 
-    // Initialize Logging
     LogConfig logConfig;
-    logConfig.Level = ParseLogLevel(config.LogLevel);
-    if (config.EnableLog) {
-        if (config.LogFilename.empty()) {
-            // Enable dual output to stdout/stderr
-            logConfig.DeviceOutput = "stdout";
-            logConfig.LogOutput = "stderr";
+    logConfig.level = parseLogLevel(config.logLevel);
+    if (config.enableLog) {
+        if (config.logFilename.empty()) {
+            logConfig.deviceOutput = "stdout";
+            logConfig.logOutput = "stderr";
         } else {
-            // Enable dual output to separate files: name.out and name.err
-            logConfig.DeviceOutput = config.LogFilename + ".out";
-            logConfig.LogOutput = config.LogFilename + ".err";
+            logConfig.deviceOutput = config.logFilename + ".out";
+            logConfig.logOutput = config.logFilename + ".err";
         }
     } else {
-        logConfig.LogOutput = config.LogFilename;
+        logConfig.logOutput = config.logFilename;
     }
-    LogInit(logConfig);
+    logInit(logConfig);
 
-    if (config.RomPath.empty()) {
+    if (config.romPath.empty()) {
         std::fprintf(stderr, "error: ROM path is required\n");
-        PrintUsage(argv[0]);
+        printUsage(argv[0]);
         return 1;
     }
-    if (config.RomBase != kDefaultRomBase) {
+    if (config.romBase != kDefaultRomBase) {
         std::fprintf(stderr, "error: ROM base must be 0x00000000\n");
         return 1;
     }
-    if (config.Width == 0 || config.Height == 0) {
+    if (config.width == 0 || config.height == 0) {
         std::fprintf(stderr, "error: SDL width/height must be non-zero\n");
         return 1;
     }
 
     uint64_t romSize = 0;
-    if (!GetFileSize(config.RomPath, &romSize) || romSize == 0) {
+    if (!getFileSize(config.romPath, &romSize) || romSize == 0) {
         std::fprintf(stderr, "error: failed to read ROM file size\n");
         return 1;
     }
     uint64_t fbSize = 0;
-    if (!ComputeFramebufferSize(config.Width, config.Height, &fbSize)) {
+    if (!computeFramebufferSize(config.width, config.height, &fbSize)) {
         std::fprintf(stderr, "error: invalid SDL size\n");
         return 1;
     }
@@ -114,38 +111,38 @@ int RunEmulator(int argc, char** argv) {
     }
 
     std::vector<MemoryRegion> mappings = {
-        {"ROM", config.RomBase, romSize},
-        {"UART", config.UartBase, kUartSize},
-        {"TIMER", config.TimerBase, kTimerSize},
-        {"SDL", config.SdlBase, sdlSize},
-        {"RAM", config.RamBase, config.RamSize},
+        {"ROM", config.romBase, romSize},
+        {"UART", config.uartBase, kUartSize},
+        {"TIMER", config.timerBase, kTimerSize},
+        {"SDL", config.sdlBase, sdlSize},
+        {"RAM", config.ramBase, config.ramSize},
     };
-    if (!ValidateMappings(mappings, &error)) {
+    if (!validateMappings(mappings, &error)) {
         std::fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
 
     MemoryDevice rom(romSize, true);
-    if (!rom.LoadImage(config.RomPath)) {
+    if (!rom.loadImage(config.romPath)) {
         std::fprintf(stderr, "error: failed to load ROM image\n");
         return 1;
     }
-    MemoryDevice ram(config.RamSize, false);
+    MemoryDevice ram(config.ramSize, false);
     UartDevice uart;
     TimerDevice timer;
 
     MemoryBus bus;
-    bus.RegisterDevice(&rom, config.RomBase, romSize, "ROM");
-    bus.RegisterDevice(&uart, config.UartBase, kUartSize, "UART");
-    bus.RegisterDevice(&timer, config.TimerBase, kTimerSize, "TIMER");
+    bus.registerDevice(&rom, config.romBase, romSize, "ROM");
+    bus.registerDevice(&uart, config.uartBase, kUartSize, "UART");
+    bus.registerDevice(&timer, config.timerBase, kTimerSize, "TIMER");
 
     SdlDisplayDevice sdl;
-    if (!sdl.Init(config.Width, config.Height, config.WindowTitle.c_str())) {
+    if (!sdl.init(config.width, config.height, config.windowTitle.c_str())) {
         std::fprintf(stderr, "error: SDL initialization failed\n");
         return 1;
     }
-    bus.RegisterDevice(&sdl, config.SdlBase, sdl.GetMappedSize(), "SDL");
-    bus.RegisterDevice(&ram, config.RamBase, config.RamSize, "RAM");
+    bus.registerDevice(&sdl, config.sdlBase, sdl.getMappedSize(), "SDL");
+    bus.registerDevice(&ram, config.ramBase, config.ramSize, "RAM");
 
     ICpuExecutor* cpu = CreateCpuExecutor();
     if (cpu == nullptr) {
@@ -153,27 +150,23 @@ int RunEmulator(int argc, char** argv) {
         return 1;
     }
 
-    // Initialize Debugger as the main execution controller
     Debugger debugger(cpu, &bus);
-    debugger.SetRegisterCount(cpu->GetRegisterCount());
-    debugger.SetCpuFrequency(config.CpuFrequency);
-    debugger.SetSdl(&sdl);
+    debugger.setRegisterCount(cpu->getRegisterCount());
+    debugger.setCpuFrequency(config.cpuFrequency);
+    debugger.setSdl(&sdl);
 
-    // Configure Trace through Debugger
     TraceOptions traceOpts;
-    traceOpts.LogInstruction = config.ITrace;
-    traceOpts.LogMemEvents = config.MTrace;
-    traceOpts.LogBranchPrediction = config.BPTrace;
-    debugger.ConfigureTrace(traceOpts);
+    traceOpts.logInstruction = config.iTrace;
+    traceOpts.logMemEvents = config.mTrace;
+    traceOpts.logBranchPrediction = config.bpTrace;
+    debugger.configureTrace(traceOpts);
 
-    bus.SetDebugger(&debugger);
-    cpu->SetDebugger(&debugger);
-    cpu->Reset();
-    cpu->SetPc(config.RomBase);
+    bus.setDebugger(&debugger);
+    cpu->setDebugger(&debugger);
+    cpu->reset();
+    cpu->setPc(config.romBase);
 
-    // Run execution (blocking)
-    debugger.Run(config.Debug);
+    debugger.run(config.debug);
 
     return 0;
 }
-
