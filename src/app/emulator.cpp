@@ -1,6 +1,6 @@
 #include "emulator/app/app.h"
 #include "emulator/app/utils.h"
-#include "emulator/logging/logging.h"
+#include "emulator/logging/logger.h"
 #include "emulator/debugger/debugger.h"
 
 #include <chrono>
@@ -26,26 +26,12 @@
 
 extern "C" ICpuExecutor* CreateCpuExecutor();
 
-namespace {
-
-LogLevel parseLogLevel(const std::string& levelStr) {
-    std::string s = toLower(levelStr);
-    if (s == "trace") return LogLevel::Trace;
-    if (s == "debug") return LogLevel::Debug;
-    if (s == "info") return LogLevel::Info;
-    if (s == "warn") return LogLevel::Warn;
-    if (s == "error") return LogLevel::Error;
-    return LogLevel::Info;
-}
-
-}
-
 int RunEmulator(int argc, char** argv) {
     EmulatorConfig config;
     bool configRequired = false;
     std::string error;
     if (!findConfigPath(argc, argv, &config, &configRequired, &error)) {
-        std::fprintf(stderr, "error: %s\n", error.c_str());
+        ERROR("%s", error.c_str());
         return 1;
     }
     if (config.showHelp) {
@@ -53,11 +39,11 @@ int RunEmulator(int argc, char** argv) {
         return 0;
     }
     if (!loadConfigFile(config.configPath, configRequired, &config, &error)) {
-        std::fprintf(stderr, "error: %s\n", error.c_str());
+        ERROR("%s", error.c_str());
         return 1;
     }
     if (!parseArgs(argc, argv, &config, &error)) {
-        std::fprintf(stderr, "error: %s\n", error.c_str());
+        ERROR("%s", error.c_str());
         return 1;
     }
     if (config.showHelp) {
@@ -65,48 +51,41 @@ int RunEmulator(int argc, char** argv) {
         return 0;
     }
 
-    LogConfig logConfig;
-    logConfig.level = parseLogLevel(config.logLevel);
-    if (config.enableLog) {
-        if (config.logFilename.empty()) {
-            logConfig.deviceOutput = "stdout";
-            logConfig.logOutput = "stderr";
-        } else {
-            logConfig.deviceOutput = config.logFilename + ".out";
-            logConfig.logOutput = config.logFilename + ".err";
-        }
-    } else {
-        logConfig.logOutput = config.logFilename;
+    logging::Config logConfig;
+    logConfig.level = logging::levelFromString(config.logLevel);
+    if (!config.logFilename.empty()) {
+        logConfig.mDeviceFile = config.logFilename + ".out";
+        logConfig.mFile = config.logFilename + ".err";
     }
-    logInit(logConfig);
+    logging::init(logConfig);
 
     if (config.romPath.empty()) {
-        std::fprintf(stderr, "error: ROM path is required\n");
+        ERROR("ROM path is required");
         printUsage(argv[0]);
         return 1;
     }
     if (config.romBase != kDefaultRomBase) {
-        std::fprintf(stderr, "error: ROM base must be 0x00000000\n");
+        ERROR("ROM base must be 0x00000000");
         return 1;
     }
     if (config.width == 0 || config.height == 0) {
-        std::fprintf(stderr, "error: SDL width/height must be non-zero\n");
+        ERROR("SDL width/height must be non-zero");
         return 1;
     }
 
     uint64_t romSize = 0;
     if (!getFileSize(config.romPath, &romSize) || romSize == 0) {
-        std::fprintf(stderr, "error: failed to read ROM file size\n");
+        ERROR("failed to read ROM file size");
         return 1;
     }
     uint64_t fbSize = 0;
     if (!computeFramebufferSize(config.width, config.height, &fbSize)) {
-        std::fprintf(stderr, "error: invalid SDL size\n");
+        ERROR("invalid SDL size");
         return 1;
     }
     uint64_t sdlSize = SdlDisplayDevice::kControlRegionSize + fbSize;
     if (sdlSize < fbSize) {
-        std::fprintf(stderr, "error: SDL mapping size overflow\n");
+        ERROR("SDL mapping size overflow");
         return 1;
     }
 
@@ -118,13 +97,13 @@ int RunEmulator(int argc, char** argv) {
         {"RAM", config.ramBase, config.ramSize},
     };
     if (!validateMappings(mappings, &error)) {
-        std::fprintf(stderr, "error: %s\n", error.c_str());
+        ERROR("%s", error.c_str());
         return 1;
     }
 
     MemoryDevice rom(romSize, true);
     if (!rom.loadImage(config.romPath)) {
-        std::fprintf(stderr, "error: failed to load ROM image\n");
+        ERROR("failed to load ROM image");
         return 1;
     }
     MemoryDevice ram(config.ramSize, false);
@@ -139,12 +118,12 @@ int RunEmulator(int argc, char** argv) {
     SdlDisplayDevice sdl;
     if (config.headless) {
         if (!sdl.initHeadless(config.width, config.height)) {
-            std::fprintf(stderr, "error: SDL headless initialization failed\n");
+            ERROR("SDL headless initialization failed");
             return 1;
         }
     } else {
         if (!sdl.init(config.width, config.height, config.windowTitle.c_str())) {
-            std::fprintf(stderr, "error: SDL initialization failed\n");
+            ERROR("SDL initialization failed");
             return 1;
         }
     }
@@ -153,7 +132,7 @@ int RunEmulator(int argc, char** argv) {
 
     ICpuExecutor* cpu = CreateCpuExecutor();
     if (cpu == nullptr) {
-        std::fprintf(stderr, "error: CreateCpuExecutor returned null\n");
+        ERROR("CreateCpuExecutor returned null");
         return 1;
     }
 

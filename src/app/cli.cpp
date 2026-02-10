@@ -17,7 +17,7 @@ void printUsage(const char* exe) {
         "  --height <pixels> SDL height (default: 480)\n"
         "  --sdl-base <addr> SDL base address (default: 0x30000000)\n"
         "  --ram-base <addr> RAM base address (default: 0x80000000)\n"
-        "  --ram-size <bytes> RAM size (default: 268435456)\n"
+        "  --ram-size <bytes> RAM size (default: 0x10000000)\n"
         "  --uart-base <addr> UART base address (default: 0x20000000)\n"
         "  --timer-base <addr> TIMER base address (default: 0x20001000)\n"
         "  --title <string> Window title (default: Emulator)\n"
@@ -26,7 +26,6 @@ void printUsage(const char* exe) {
         "  --bptrace         Enable Branch Prediction Trace\n"
         "  --log-level <lvl>     Set log level (trace, debug, info, warn, error)\n"
         "  --log-filename <path> Set log file path (device->name.out, other->name.err)\n"
-        "  --enable-log          Enable separate logging (splits device/other output)\n"
         "  --headless            Run without SDL window (headless mode)\n"
         "  --help, -h            Show this help\n",
         name);
@@ -191,10 +190,6 @@ bool parseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error
                 return false;
             }
             config->logFilename = value;
-            continue;
-        }
-        if (arg == "--enable-log") {
-            config->enableLog = true;
             continue;
         }
         if (arg == "--headless") {

@@ -5,7 +5,7 @@
 #include "emulator/app/app.h"
 #include "emulator/app/utils.h"
 #include "emulator/debugger/expression_parser.h"
-#include "emulator/logging/logging.h"
+#include "emulator/logging/logger.h"
 
 #include "emulator/app/terminal.h"
 
@@ -177,7 +177,7 @@ void Debugger::logTrace(const TraceRecord& record) {
     }
 
     if (!line.empty()) {
-        LOG_TRACE("%s", line.c_str());
+        TRACE("%s", line.c_str());
     }
 }
 
@@ -235,10 +235,11 @@ void Debugger::run(bool interactive) {
                 }
             }
         });
-
-        setupUart();
-        setupLogging();
+        
         updateStatusDisplay();
+        setTerminalLogHandler();
+    } else {
+        setDefaultLogHandler();
     }
 
     std::thread cpuThread(&Debugger::cpuThreadLoop, this);
@@ -267,27 +268,31 @@ void Debugger::run(bool interactive) {
     mTerminal.reset();
 }
 
-void Debugger::setupUart() {
-    if (!mTerminal || !mBus) return;
-
-    UartDevice* uart = static_cast<UartDevice*>(mBus->getDevice("UART"));
-    if (uart) {
-        auto handler = [this](const std::string& text) {
-            for (char ch : text) {
-                mTerminal->printChar(static_cast<uint8_t>(ch));
-            }
-        };
-        uart->setTxHandler(handler);
-    }
-}
-
-void Debugger::setupLogging() {
+void Debugger::setTerminalLogHandler() {
     if (!mTerminal) return;
 
     auto outputHandler = [this](const char* msg) {
         mTerminal->printLog(msg);
     };
-    logSetOutputHandler(outputHandler);
+
+    auto deviceHandler = [this](const char* msg) {
+        for (auto c : std::string(msg)) {
+            mTerminal->printChar(c);
+        }
+    };
+    logging::setOutputHandler(outputHandler, deviceHandler);
+}
+
+void Debugger::setDefaultLogHandler() {
+    auto logHandler = [](const char* msg) {
+        fprintf(stderr, "%s", msg);
+        fflush(stderr);
+    };
+    auto deviceHandler = [](const char* msg) {
+        fprintf(stdout, "%s", msg);
+        fflush(stdout);
+    };
+    logging::setOutputHandler(logHandler, deviceHandler);
 }
 
 void Debugger::cpuThreadLoop() {
@@ -334,9 +339,9 @@ void Debugger::cpuThreadLoop() {
         if (!result.success) {
             mState.state.store(CpuState::Halted, std::memory_order_release);
             mControl.cv.notify_all();
-            LOG_INFO("CPU Halted at 0x%llx", (unsigned long long)mCpu->getPc());
+            INFO("CPU Halted at 0x%llx", (unsigned long long)mCpu->getPc());
             if (mCpu->getLastError().type != CpuErrorType::None) {
-                LOG_ERROR("Last error: Type=%d Addr=0x%llx Size=%u",
+                ERROR("Last error: Type=%d Addr=0x%llx Size=%u",
                             static_cast<int>(mCpu->getLastError().type),
                             (unsigned long long)mCpu->getLastError().address,
                             mCpu->getLastError().size);
@@ -379,13 +384,13 @@ void Debugger::sdlThreadLoop() {
 
 void Debugger::runPlainInputLoop() {
     if (mBus == nullptr) {
-        LOG_ERROR("Memory bus not initialized");
+        ERROR("Memory bus not initialized");
         return;
     }
 
     UartDevice* uart = static_cast<UartDevice*>(mBus->getDevice("UART"));
     if (uart == nullptr) {
-        LOG_ERROR("UART device not found");
+        ERROR("UART device not found");
         return;
     }
 
@@ -393,7 +398,7 @@ void Debugger::runPlainInputLoop() {
     bool isTty = isatty(STDIN_FILENO);
 
     if (isTty && tcgetattr(STDIN_FILENO, &originalSettings) != 0) {
-        LOG_ERROR("Failed to get terminal attributes: %s", strerror(errno));
+        ERROR("Failed to get terminal attributes: %s", strerror(errno));
         return;
     }
 
@@ -420,7 +425,7 @@ void Debugger::runPlainInputLoop() {
             if (errno == EINTR) {
                 continue;
             }
-            LOG_ERROR("Poll failed: %s", strerror(errno));
+            ERROR("Poll failed: %s", strerror(errno));
             break;
         }
 
@@ -436,7 +441,7 @@ void Debugger::runPlainInputLoop() {
                 if (errno == EINTR || errno == EAGAIN) {
                     continue;
                 }
-                LOG_ERROR("Read failed: %s", strerror(errno));
+                ERROR("Read failed: %s", strerror(errno));
                 break;
             }
 
@@ -446,7 +451,7 @@ void Debugger::runPlainInputLoop() {
         }
 
         if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            LOG_ERROR("Terminal error event: 0x%x", pfd.revents);
+            ERROR("Terminal error event: 0x%x", pfd.revents);
             break;
         }
     }
@@ -492,7 +497,7 @@ std::vector<uint64_t> Debugger::readRegisters() {
 void Debugger::printRegisters() {
     std::vector<uint64_t> regs = readRegisters();
     for (uint32_t regId = 0; regId < regs.size(); ++regId) {
-        LOG_INFO("r%u = 0x%llx", regId, (unsigned long long)regs[regId]);
+        INFO("r%u = 0x%llx", regId, (unsigned long long)regs[regId]);
     }
 }
 
@@ -549,7 +554,7 @@ bool Debugger::processCommand(const std::string& command) {
 bool Debugger::cmdRun(std::istringstream& args) {
     (void)args;
     if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
-        LOG_INFO("CPU is halted. Cannot run.");
+        INFO("CPU is halted. Cannot run.");
         return false;
     }
     mState.state.store(CpuState::Running, std::memory_order_release);
@@ -559,7 +564,7 @@ bool Debugger::cmdRun(std::istringstream& args) {
 
 bool Debugger::cmdStep(std::istringstream& args) {
     if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
-        LOG_INFO("CPU is halted. Cannot step.");
+        INFO("CPU is halted. Cannot step.");
         return false;
     }
     uint32_t steps = 1;
@@ -580,7 +585,7 @@ bool Debugger::cmdPause(std::istringstream& args) {
     (void)args;
     
     if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
-        LOG_INFO("CPU is halted. Cannot pause.");
+        INFO("CPU is halted. Cannot pause.");
         return false;
     }
 
@@ -628,7 +633,7 @@ bool Debugger::cmdMem(std::istringstream& args) {
             line += byteStr;
 
             if (i % 16 == 15 || i + 1 == data.size()) {
-                LOG_INFO("%s", line.c_str());
+                INFO("%s", line.c_str());
                 line.clear();
             }
         }
@@ -642,7 +647,7 @@ bool Debugger::cmdEval(std::istringstream& args) {
     std::getline(args, expr);
     if (!expr.empty()) {
         uint64_t value = evalExpression(expr);
-        LOG_INFO("0x%llx (%llu)", (unsigned long long)value, (unsigned long long)value);
+        INFO("0x%llx (%llu)", (unsigned long long)value, (unsigned long long)value);
         return true;
     }
     return false;
@@ -656,11 +661,11 @@ bool Debugger::cmdBp(std::istringstream& args) {
     if (action == "list" || action.empty()) {
         std::lock_guard<std::mutex> lock(mMutex);
         if (mBreakpoints.empty()) {
-            LOG_INFO("No breakpoints.");
+            INFO("No breakpoints.");
         } else {
-            LOG_INFO("Breakpoints:");
+            INFO("Breakpoints:");
             for (uint64_t bp : mBreakpoints) {
-                LOG_INFO("  0x%llx", (unsigned long long)bp);
+                INFO("  0x%llx", (unsigned long long)bp);
             }
         }
         return true;
@@ -684,28 +689,28 @@ bool Debugger::cmdLog(std::istringstream& args) {
     std::string trimmed = toLower(levelStr);
     trimInPlace(&trimmed);
 
-    LogLevel level = LogLevel::Info;
+    logging::Level level = logging::Level::Info;
     bool valid = false;
 
-    if (trimmed == "trace") { level = LogLevel::Trace; valid = true; }
-    else if (trimmed == "debug") { level = LogLevel::Debug; valid = true; }
-    else if (trimmed == "info") { level = LogLevel::Info; valid = true; }
-    else if (trimmed == "warn") { level = LogLevel::Warn; valid = true; }
-    else if (trimmed == "error") { level = LogLevel::Error; valid = true; }
+    if (trimmed == "trace") { level = logging::Level::Trace; valid = true; }
+    else if (trimmed == "debug") { level = logging::Level::Debug; valid = true; }
+    else if (trimmed == "info") { level = logging::Level::Info; valid = true; }
+    else if (trimmed == "warn") { level = logging::Level::Warn; valid = true; }
+    else if (trimmed == "error") { level = logging::Level::Error; valid = true; }
 
     if (valid) {
-        logSetLevel(level);
-        LOG_INFO("Log level set to %s", levelStr.c_str());
+        logging::level(level);
+        INFO("Log level set to %s", levelStr.c_str());
         return true;
     }
 
-    LOG_INFO("Usage: log [trace|debug|info|warn|error]");
+    INFO("Usage: log [trace|debug|info|warn|error]");
     return true;
 }
 
 bool Debugger::cmdHelp(std::istringstream& args) {
     (void)args;
-    LOG_INFO("Available commands:");
+    INFO("Available commands:");
 
     size_t maxNameLen = 0;
     for (const auto& cmd : mCommands) {
@@ -716,7 +721,7 @@ bool Debugger::cmdHelp(std::istringstream& args) {
 
     for (const auto& cmd : mCommands) {
         std::string padding(maxNameLen - cmd.name.length() + 2, ' ');
-        LOG_INFO("  %s%s%s", cmd.name.c_str(), padding.c_str(), cmd.help.c_str());
+        INFO("  %s%s%s", cmd.name.c_str(), padding.c_str(), cmd.help.c_str());
     }
     return true;
 }

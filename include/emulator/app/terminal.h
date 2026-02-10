@@ -1,7 +1,7 @@
 #pragma once
 
 #include "emulator/app/vterm_manager.h"
-#include "emulator/logging/logging.h"
+#include "emulator/logging/logger.h"
 
 #include <string>
 #include <mutex>
@@ -79,12 +79,12 @@ public:
             return;
         }
         if (tcgetattr(fd, &mOriginalSettings) != 0) {
-            LOG_ERROR("Failed to get terminal attributes: %s", strerror(errno));
+            ERROR("Failed to get terminal attributes: %s", strerror(errno));
             mValid = false;
             return;
         }
         if (tcsetattr(fd, TCSANOW, &newSettings) != 0) {
-            LOG_ERROR("Failed to set terminal attributes: %s", strerror(errno));
+            ERROR("Failed to set terminal attributes: %s", strerror(errno));
             mValid = false;
         }
     }

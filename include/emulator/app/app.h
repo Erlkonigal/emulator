@@ -44,7 +44,6 @@ struct EmulatorConfig {
     bool headless = false;
     std::string logLevel = "info";
     std::string logFilename = "";
-    bool enableLog = false;
 };
 
 bool loadConfigFile(const std::string& path, bool required, EmulatorConfig* config,

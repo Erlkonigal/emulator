@@ -79,20 +79,6 @@ TEST(device_uart_rx_data) {
     EXPECT_EQ(static_cast<uint32_t>(r1.data & 0xffu), static_cast<uint32_t>('i'));
 }
 
-TEST(device_uart_tx_callback) {
-    UartDevice uart;
-    std::string captured;
-    uart.setTxHandler([&](const std::string& text) { captured += text; });
-
-    MemAccess data = MakeAccess(0x0, 4, MemAccessType::Write, 'Z');
-    MemResponse w = uart.write(data);
-    ASSERT_TRUE(w.success);
-    uart.flush();
-    uart.setTxHandler(nullptr);
-
-    EXPECT_TRUE(captured.find("Z") != std::string::npos);
-}
-
 TEST(device_uart_invalid_access) {
     UartDevice uart;
     MemAccess bad = MakeAccess(0x2, 2, MemAccessType::Read);

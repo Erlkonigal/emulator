@@ -8,7 +8,7 @@
 #include "emulator/debugger/debugger.h"
 #include "emulator/device/device.h"
 #include "emulator/device/memory.h"
-#include "emulator/logging/logging.h"
+#include "emulator/logging/logger.h"
 #include "toy_cpu_executor.h"
 #include "toy_isa.h"
 
@@ -22,10 +22,10 @@ struct TraceTestContext {
     std::string LogFile;
 
     explicit TraceTestContext(const std::string& logFile) : LogFile(logFile) {
-        LogConfig config;
-        config.level = LogLevel::Trace;
-        config.logOutput = LogFile;
-        logInit(config);
+        logging::Config config;
+        config.level = logging::Level::Trace;
+        config.mFile = LogFile;
+        logging::init(config);
         Cpu = new ToyCpuExecutor();
         Bus = new MemoryBus();
         Dbg = new Debugger(Cpu, Bus);

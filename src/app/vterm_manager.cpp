@@ -103,8 +103,7 @@ void VTermManager::pushChar(const char ch) {
 void VTermManager::pushLog(const char* msg) {
     if (mVterm) {
         char formatted[512];
-        snprintf(formatted, sizeof(formatted), "%s\r\n", msg);
-        
+        snprintf(formatted, sizeof(formatted), "%s\r", msg);
         vterm_input_write(mVterm, formatted, strlen(formatted));
         mDirty = true;
     }

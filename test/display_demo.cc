@@ -161,6 +161,9 @@ int main(int argc, char** argv) {
     args.push_back("65536");
     args.push_back("--title");
     args.push_back("Emulator Display Demo");
+
+    args.push_back("--log-filename");
+    args.push_back("display_demo_output");
     
     // Optional: Enable trace if you want to see what's happening
     args.push_back("--log-level");
@@ -169,7 +172,7 @@ int main(int argc, char** argv) {
     // args.push_back("--itrace");
     // args.push_back("--bptrace");
 
-    args.push_back("--debug");
+    // args.push_back("--debug");
 
     std::vector<char*> argv2;
     argv2.reserve(args.size());

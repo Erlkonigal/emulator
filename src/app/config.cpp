@@ -61,17 +61,6 @@ bool applyConfigValue(EmulatorConfig* config, const std::string& key, const std:
         config->logFilename = value;
         return true;
     }
-    if (key == "enable_log") {
-        bool flag = false;
-        if (!parseBool(value, &flag)) {
-            if (error != nullptr) {
-                *error = "Invalid enable_log value: " + value;
-            }
-            return false;
-        }
-        config->enableLog = flag;
-        return true;
-    }
     if (key == "headless") {
         bool flag = false;
         if (!parseBool(value, &flag)) {

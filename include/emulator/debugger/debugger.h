@@ -35,21 +35,22 @@ public:
     void setSdl(SdlDisplayDevice* sdl);
     void run(bool interactive);
 
-    MemResponse busRead(const MemAccess& access) override;
-    MemResponse busWrite(const MemAccess& access) override;
-
     std::vector<uint8_t> scanMemory(uint64_t address, uint32_t length);
     std::vector<uint64_t> readRegisters();
     void printRegisters();
     uint64_t evalExpression(const std::string& expression);
     void addBreakpoint(uint64_t address);
     void removeBreakpoint(uint64_t address);
-    bool isBreakpoint(uint64_t address) override;
     bool hasBreakpoints() override;
     bool processCommand(const std::string& command);
 
     void setRegisterCount(uint32_t count);
     void setCpuFrequency(uint32_t cpuFreq);
+
+    MemResponse busRead(const MemAccess& access) override;
+    MemResponse busWrite(const MemAccess& access) override;
+
+    bool isBreakpoint(uint64_t address) override;
 
     void configureTrace(const TraceOptions& options) override;
     void setTraceFormatter(TraceFormatter formatter) override;
@@ -82,8 +83,8 @@ private:
     void sdlThreadLoop();
     void runPlainInputLoop();
 
-    void setupUart();
-    void setupLogging();
+    void setDefaultLogHandler();
+    void setTerminalLogHandler();
 
     bool cmdRun(std::istringstream& args);
     bool cmdStep(std::istringstream& args);

@@ -1,5 +1,5 @@
 #include "emulator/device/uart.h"
-#include "emulator/logging/logging.h"
+#include "emulator/logging/logger.h"
 
 #include <cstdio>
 #include <string>
@@ -47,11 +47,6 @@ UartDevice::~UartDevice() {
 void UartDevice::pushRx(uint8_t ch) {
     std::lock_guard<std::mutex> lock(mMutex);
     mRxBuffer.push_back(ch);
-}
-
-void UartDevice::setTxHandler(TxHandler handler) {
-    std::lock_guard<std::mutex> lock(mMutex);
-    mTxCallback = std::move(handler);
 }
 
 void UartDevice::flush() {
@@ -129,10 +124,6 @@ void UartDevice::flushTxLocked() {
     if (mTxBuffer.empty()) {
         return;
     }
-    if (mTxCallback) {
-        mTxCallback(mTxBuffer);
-    } else {
-        logDevicePrint("%s", mTxBuffer.c_str());
-    }
+    logging::device("%s", mTxBuffer.c_str());
     mTxBuffer.clear();
 }
