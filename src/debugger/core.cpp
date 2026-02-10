@@ -345,7 +345,13 @@ void Debugger::cpuThreadLoop() {
             if (!result.success) {
                 mState.state.store(CpuState::Halted, std::memory_order_release);
                 mControl.cv.notify_all();
-                LOG_ERROR("CPU Halted or Encountered Error at 0x%llx", (unsigned long long)mCpu->getPc());
+                LOG_INFO("CPU Halted at 0x%llx", (unsigned long long)mCpu->getPc());
+                if (mCpu->getLastError().type != CpuErrorType::None) {
+                    LOG_ERROR("Last error: Type=%d Addr=0x%llx Size=%u",
+                             static_cast<int>(mCpu->getLastError().type),
+                             (unsigned long long)mCpu->getLastError().address,
+                             mCpu->getLastError().size);
+                }
             }
 
             mBus->syncAll(mCpu->getCycle());

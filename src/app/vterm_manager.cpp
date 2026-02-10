@@ -13,12 +13,14 @@ static void outputCallback(const char *s, size_t len, void* user) {
 
 static const VTermScreenCallbacks kScreenCallbacks = {
     .damage = [](VTermRect rect, void* user) -> int {
+        (void)rect;
         VTermManager* self = static_cast<VTermManager*>(user);
         self->mDirty = true;
         return 1;
     },
     .moverect = nullptr,
     .movecursor = [](VTermPos pos, VTermPos oldpos, int visible, void* user) {
+        (void)oldpos;
         VTermManager* self = static_cast<VTermManager*>(user);
         self->mCursorRow = pos.row;
         self->mCursorCol = pos.col;
@@ -159,7 +161,18 @@ void VTermManager::processInput(int ch) {
         case KEY_IC:
             key = VTERM_KEY_INS;
             break;
-        case KEY_F(1) ... KEY_F(12):
+        case KEY_F(1):
+        case KEY_F(2):
+        case KEY_F(3):
+        case KEY_F(4):
+        case KEY_F(5):
+        case KEY_F(6):
+        case KEY_F(7):
+        case KEY_F(8):
+        case KEY_F(9):
+        case KEY_F(10):
+        case KEY_F(11):
+        case KEY_F(12):
             key = static_cast<VTermKey>(VTERM_KEY_FUNCTION_0 + (ch - KEY_F(1)));
             break;
         case 23:
