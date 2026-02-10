@@ -59,8 +59,8 @@ int main(int argc, char** argv) {
     std::vector<uint32_t> prog;
 
     // 1. Hello World to UART
-    EmitPrint(&prog, uartBase, "Display Demo Started.\n");
-    EmitPrint(&prog, uartBase, "Initializing Display...\n");
+    EmitPrint(&prog, uartBase, "Display Demo Started.\r\n");
+    EmitPrint(&prog, uartBase, "Initializing Display...\r\n");
 
     // 2. Draw Gradient
     // Fill a small top-left rectangle with a gradient (ARGB8888), 32-bit stores.
@@ -79,8 +79,8 @@ int main(int argc, char** argv) {
     // Request present.
     EmitWrite32(&prog, sdlBase + 0x00u, 1u);
 
-    EmitPrint(&prog, uartBase, "Display Initialized.\n");
-    EmitPrint(&prog, uartBase, "Press any key in the window to exit.\n");
+    EmitPrint(&prog, uartBase, "Display Initialized.\r\n");
+    EmitPrint(&prog, uartBase, "Press any key in the window to exit.\r\n");
 
     // 3. Main Loop: Poll UART and Wait for Key Press
     // Register Setup:
@@ -166,7 +166,7 @@ int main(int argc, char** argv) {
     args.push_back("--log-level");
     args.push_back("trace");
     // args.push_back("--mtrace");
-    args.push_back("--itrace");
+    // args.push_back("--itrace");
     // args.push_back("--bptrace");
 
     args.push_back("--debug");
