@@ -1,69 +1,153 @@
-## Dependency
-- libreadline
+# Emulator Framework
+
+A modular emulator framework with a pluggable CPU architecture.
+
+## Dependencies
+
+- CMake 3.16+
+- C++20 compiler (GCC 11+ or Clang 14+)
 - libsdl2-image-dev
 - libsdl2-ttf-dev
+- libvterm
+- libncurses
 
-## Run
+## Build
 
-### CLI
-- Required: `--rom <path>`
-- Optional: `--config <file>` (default: `emulator.conf`)
-- Optional flags/values:
-  - `--debug`
-  - `--width <pixels>` (default: 640)
-  - `--height <pixels>` (default: 480)
-  - `--sdl-base <addr>` (default: 0x30000000)
-  - `--ram-base <addr>` (default: 0x80000000)
-  - `--ram-size <bytes>` (default: 268435456)
-  - `--uart-base <addr>` (default: 0x20000000)
-  - `--timer-base <addr>` (default: 0x20001000)
-  - `--title <string>` (default: Emulator)
+```bash
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+```
 
-### CPU Executor
-- This project expects the user to provide a CPU implementation and export
-  `extern "C" ICpuExecutor* CreateCpuExecutor();` for the main entry point.
+## Architecture
 
-### Config file
-- Format: `key=value` per line, supports `#` or `;` comments and hex values (e.g. `0x80000000`).
-- Supported keys: `rom`, `debug`, `width`, `height`, `ram_base`, `ram_size`, `uart_base`,
-  `timer_base`, `sdl_base`, `title`.
+```
+┌─────────────────────────────────────────┐
+│              Application                │
+│    (CLI, Terminal, VTerm, Logging)      │
+├─────────────────────────────────────────┤
+│               Debugger                  │
+│   (Expression Parser, Breakpoints)      │
+├──────────────────┬──────────────────────┤
+│    MemoryBus     │       Devices         │
+│  - Device regs   │  - MemoryDevice      │
+│  - Addr mapping  │  - UartDevice        │
+│  - R/W routing   │  - TimerDevice       │
+└──────────────────┴──────────────────────┘
+                   ↑
+                   │ ICpuExecutor
+                   ▼
+         ┌─────────────────────┐
+         │  CPU (user-provided) │
+         └─────────────────────┘
+```
 
-## Memory Map
-- ROM: base `0x00000000`, size = ROM file size (must not overlap other devices).
-- RAM: base `0x80000000`, size = 256 MiB by default.
-- UART: base `0x20000000`, size = 0x100.
-- Timer: base `0x20001000`, size = 0x100.
-- SDL Device: base `0x30000000`
-  - control region size = 0x1000
-  - framebuffer at base + 0x1000
-  - keyboard registers in control region (see offsets below)
+## Naming Conventions
 
-### SDL Display Registers
-- `0x00 CTRL` (write 1 = present)
-- `0x04 WIDTH` (read-only)
-- `0x08 HEIGHT` (read-only)
-- `0x0C PITCH` (read-only)
-- `0x10 STATUS` (read-only; bit0 ready, bit1 dirty)
-- `0x20 KEY_DATA` (read pops next key; value is SDL key sym)
-- `0x24 KEY_STATUS` (read-only; bit0 ready if queue not empty; write clears queue)
-- `0x28 KEY_LAST` (read-only; last key pressed)
+| Type | Convention | Example |
+|------|------------|---------|
+| Classes/Structs | PascalCase | `MemoryBus`, `Device` |
+| Methods/Functions | camelCase | `registerDevice()`, `read()` |
+| Member Variables | m_ + camelCase | `mCpu`, `mBus` |
+| Constants | k + PascalCase | `kDefaultRomBase` |
+| Local Variables | camelCase | `mapping`, `devices` |
 
 ## Devices
 
-### Memory Device
-- Raw image format: binary output from `objcopy -O bin`.
-- Image is loaded from base offset 0 by default; data beyond memory size is truncated.
-- Supports 1/2/4/8 byte reads and writes; ROM rejects writes.
+### CPU Executor Interface
 
-### UART Device
-- Registers (offsets):
-  - 0x0 DATA (read RX byte, write TX byte)
-  - 0x4 STATUS (bit0: RX ready, bit1: TX ready)
-- TX writes are printed to stdout.
+Implement `ICpuExecutor` and export:
+```cpp
+extern "C" ICpuExecutor* CreateCpuExecutor();
+```
 
-### Timer Device
-- Real-time counter in microseconds.
-- Registers (offsets):
-  - 0x0 LOW (lower 32 bits)
-  - 0x4 HIGH (upper 32 bits)
-  - 0x8 CTRL (write to reset counter)
+### MemoryBus
+
+- `registerDevice(Device* device, uint64_t base, uint64_t size, const std::string& name)`
+- `findMapping(uint64_t address) const`
+- `read(const MemAccess& access)`
+- `write(const MemAccess& access)`
+- `syncAll(uint64_t currentCycle)`
+- `setDebugger(Debugger* debugger)`
+
+### Available Devices
+
+| Device | Base Address | Size |
+|--------|--------------|------|
+| Memory | configurable | configurable |
+| UART | 0x20000000 | 0x100 |
+| Timer | 0x20001000 | 0x100 |
+| SDL Display | 0x30000000 | varies |
+
+## CLI Usage
+
+### Required
+- `--rom <path>` : ROM file path
+
+### Optional
+- `--config <file>` (default: `emulator.conf`)
+- `--debug` : Enable debugger
+- `--width <pixels>` (default: 640)
+- `--height <pixels>` (default: 480)
+- `--sdl-base <addr>` (default: 0x30000000)
+- `--ram-base <addr>` (default: 0x80000000)
+- `--ram-size <bytes>` (default: 268435456)
+- `--uart-base <addr>` (default: 0x20000000)
+- `--timer-base <addr>` (default: 0x20001000)
+- `--title <string>` (default: Emulator)
+
+### Config File
+
+Format: `key=value` per line, `#` or `;` comments, hex values supported.
+
+Supported keys: `rom`, `debug`, `width`, `height`, `ram_base`, `ram_size`,
+`uart_base`, `timer_base`, `sdl_base`, `title`.
+
+## Memory Map
+
+| Region | Base | Size |
+|--------|------|------|
+| ROM | 0x00000000 | ROM file size |
+| RAM | 0x80000000 | 256 MiB default |
+| UART | 0x20000000 | 0x100 |
+| Timer | 0x20001000 | 0x100 |
+| SDL Display | 0x30000000 | varies |
+
+## Device Registers
+
+### SDL Display (0x30000000)
+
+| Offset | Register | Access | Description |
+|--------|----------|--------|-------------|
+| 0x00 | CTRL | W | Write 1 to present framebuffer |
+| 0x04 | WIDTH | R | Display width |
+| 0x08 | HEIGHT | R | Display height |
+| 0x0C | PITCH | R | Bytes per row |
+| 0x10 | STATUS | R | Bit0: ready, Bit1: dirty |
+| 0x20 | KEY_DATA | R | Read pops key (SDL sym) |
+| 0x24 | KEY_STATUS | R/W | Bit0: queue not empty, W clears queue |
+| 0x28 | KEY_LAST | R | Last key pressed |
+
+Framebuffer offset: base + 0x1000
+
+### UART (0x20000000)
+
+| Offset | Register | Access | Description |
+|--------|----------|--------|-------------|
+| 0x00 | DATA | R/W | RX read, TX write |
+| 0x04 | STATUS | R | Bit0: RX ready, Bit1: TX ready |
+
+### Timer (0x20001000)
+
+| Offset | Register | Access | Description |
+|--------|----------|--------|-------------|
+| 0x00 | LOW | R | Lower 32 bits (microseconds) |
+| 0x04 | HIGH | R | Upper 32 bits |
+| 0x08 | CTRL | W | Reset counter |
+
+## Running Tests
+
+```bash
+cd build/release
+./test/tests
+```
