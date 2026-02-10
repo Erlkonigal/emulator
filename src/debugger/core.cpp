@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <sstream>
 #include <iostream>
 #include <thread>
@@ -75,6 +76,11 @@ std::string defaultFormatter(const TraceRecord& record, const TraceOptions& opti
 }
 
 } // namespace
+
+namespace {
+    constexpr size_t kReadBufferSize = 64;
+    constexpr int kPollTimeoutMs = 10;
+}
 
 constexpr uint32_t kInstructionsPerBatch = 1000;
 constexpr auto kPresentInterval = std::chrono::milliseconds(16);
@@ -250,9 +256,9 @@ void Debugger::run(bool interactive) {
     }
 
     if (interactive) {
-        mTerminal->runInputLoop();
+        mTerminal->runCursesInputLoop();
     } else {
-        inputLoop();
+        runPlainInputLoop();
     }
 
     mState.shouldExit.store(true, std::memory_order_release);
@@ -393,58 +399,84 @@ void Debugger::sdlThreadLoop() {
     }
 }
 
-void Debugger::inputLoop() {
+void Debugger::runPlainInputLoop() {
     if (mBus == nullptr) {
-        return;
-    }
-    UartDevice* uart = static_cast<UartDevice*>(mBus->getDevice("UART"));
-    if (uart == nullptr) {
+        LOG_ERROR("Memory bus not initialized");
         return;
     }
 
-    struct termios oldt, newt;
+    UartDevice* uart = static_cast<UartDevice*>(mBus->getDevice("UART"));
+    if (uart == nullptr) {
+        LOG_ERROR("UART device not found");
+        return;
+    }
+
+    struct termios originalSettings{};
     bool isTty = isatty(STDIN_FILENO);
-    if (isTty) {
-        tcgetattr(STDIN_FILENO, &oldt);
-        newt = oldt;
-        newt.c_lflag &= ~(ICANON | ECHO);
-        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    if (isTty && tcgetattr(STDIN_FILENO, &originalSettings) != 0) {
+        LOG_ERROR("Failed to get terminal attributes: %s", strerror(errno));
+        return;
+    }
+
+    struct termios newSettings = originalSettings;
+    newSettings.c_lflag &= ~(ICANON | ECHO);
+
+    TermiosGuard guard(STDIN_FILENO, newSettings);
+    if (!guard.isValid()) {
+        return;
     }
 
     while (!mState.shouldExit.load(std::memory_order_acquire)) {
-         if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
-             break;
-         }
+        if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
+            LOG_INFO("CPU halted, exiting input loop");
+            break;
+        }
 
-         struct pollfd pfd;
-         pfd.fd = STDIN_FILENO;
-         pfd.events = POLLIN;
+        struct pollfd pfd;
+        pfd.fd = STDIN_FILENO;
+        pfd.events = POLLIN;
 
-         int ret = poll(&pfd, 1, 10);
+        int ret = poll(&pfd, 1, kPollTimeoutMs);
 
-         if (ret > 0) {
-             if (pfd.revents & POLLIN) {
-                 char buf[64];
-                 ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-                 if (n > 0) {
-                     for (ssize_t i = 0; i < n; ++i) {
-                         uart->pushRx(static_cast<uint8_t>(buf[i]));
-                     }
-                 } else if (n == 0) {
-                     break;
-                 }
-             } else if (pfd.revents & (POLLERR | POLLHUP)) {
-                 break;
-             }
-         } else if (ret < 0) {
-             if (errno != EINTR) {
-                 break;
-             }
-         }
-    }
+        if (ret < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            LOG_ERROR("Poll failed: %s", strerror(errno));
+            break;
+        }
 
-    if (isTty) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        if (ret == 0) {
+            continue;
+        }
+
+        if (pfd.revents & POLLIN) {
+            std::array<char, kReadBufferSize> buffer{};
+            ssize_t bytesRead = read(STDIN_FILENO, buffer.data(), buffer.size());
+
+            if (bytesRead < 0) {
+                if (errno == EINTR || errno == EAGAIN) {
+                    continue;
+                }
+                LOG_ERROR("Read failed: %s", strerror(errno));
+                break;
+            }
+
+            if (bytesRead == 0) {
+                LOG_INFO("EOF received, exiting input loop");
+                break;
+            }
+
+            for (ssize_t i = 0; i < bytesRead; ++i) {
+                uart->pushRx(static_cast<uint8_t>(buffer[i]));
+            }
+        }
+
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            LOG_ERROR("Terminal error event: 0x%x", pfd.revents);
+            break;
+        }
     }
 }
 

@@ -81,7 +81,7 @@ private:
 
     void cpuThreadLoop();
     void sdlThreadLoop();
-    void inputLoop();
+    void runPlainInputLoop();
 
     void setupUart();
     void setupLogging();

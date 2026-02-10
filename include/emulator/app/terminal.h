@@ -1,11 +1,15 @@
 #pragma once
 
 #include "emulator/app/vterm_manager.h"
+#include "emulator/logging/logging.h"
+
 #include <string>
 #include <mutex>
 #include <functional>
 #include <atomic>
 #include <queue>
+#include <termios.h>
+#include <cstring>
 
 enum class FocusPanel {
     VTERM,
@@ -29,7 +33,7 @@ public:
     void switchFocus();
 
     void handleMouse(int y, int x);
-    void runInputLoop();
+    void runCursesInputLoop();
     void stop() { mShouldClose = true; }
     void setOnInput(std::function<void(const std::string&)> callback) { mOnInput = callback; }
 
@@ -37,7 +41,7 @@ private:
     void renderAll();
     void processDebugInput(int ch);
     void setupWindows();
-    void handleResize();
+    void handleCursesResize();
 
     std::mutex mMutex;
 
@@ -59,4 +63,31 @@ private:
     std::atomic<bool> mShouldClose{false};
     
     std::function<void(const std::string&)> mOnInput;
+};
+
+
+class TermiosGuard {
+    int mFd;
+    struct termios mOriginalSettings;
+    bool mValid;
+
+public:
+    explicit TermiosGuard(int fd, struct termios& newSettings)
+        : mFd(fd), mOriginalSettings(newSettings), mValid(true) {
+        if (tcsetattr(fd, TCSANOW, &newSettings) != 0) {
+            LOG_ERROR("Failed to set terminal attributes: %s", strerror(errno));
+            mValid = false;
+        }
+    }
+
+    ~TermiosGuard() {
+        if (mValid) {
+            tcsetattr(mFd, TCSANOW, &mOriginalSettings);
+        }
+    }
+
+    TermiosGuard(const TermiosGuard&) = delete;
+    TermiosGuard& operator=(const TermiosGuard&) = delete;
+
+    bool isValid() const noexcept { return mValid; }
 };

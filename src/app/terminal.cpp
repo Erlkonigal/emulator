@@ -7,6 +7,10 @@
 
 static volatile sig_atomic_t gResizeFlag = 0;
 
+namespace {
+    constexpr int kSwitchFocusKey = 23;  // Ctrl+W
+}
+
 static void sigwinchHandler(int sig) {
     (void)sig;
     gResizeFlag = 1;
@@ -166,39 +170,37 @@ void Terminal::handleMouse(int y, int x) {
     }
 }
 
-void Terminal::runInputLoop() {
+void Terminal::runCursesInputLoop() {
     WINDOW* currentWin = mVTermManager.getWindow();
 
     while (!mShouldClose) {
         if (gResizeFlag) {
             gResizeFlag = 0;
-            endwin();
-            refresh();
-            clear();
-            mHeight = LINES;
-            setupWindows();
+            handleCursesResize();
             currentWin = mVTermManager.getWindow();
+            continue;
         }
 
-        int ch;
-        if (mFocus == FocusPanel::VTERM) {
-            ch = wgetch(currentWin);
-        } else {
-            ch = wgetch(mDebugWin);
-        }
+        int ch = (mFocus == FocusPanel::VTERM)
+            ? wgetch(currentWin)
+            : wgetch(mDebugWin);
 
         if (ch == ERR) {
-        } else if (ch == KEY_MOUSE) {
+        }
+        else if (ch == KEY_MOUSE) {
             MEVENT event;
             if (getmouse(&event) == OK) {
                 handleMouse(event.y, event.x);
             }
-        } else if (ch == 23) {
+        }
+        else if (ch == kSwitchFocusKey) {
             switchFocus();
-        } else if (mFocus == FocusPanel::VTERM) {
+        }
+        else if (mFocus == FocusPanel::VTERM) {
             std::lock_guard<std::mutex> lock(mMutex);
             mVTermManager.processInput(ch);
-        } else {
+        }
+        else {
             processDebugInput(ch);
         }
 
@@ -250,7 +252,7 @@ void Terminal::processDebugInput(int ch) {
     }
 }
 
-void Terminal::handleResize() {
+void Terminal::handleCursesResize() {
     endwin();
     refresh();
     clear();
