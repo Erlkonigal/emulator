@@ -22,9 +22,10 @@ endif()
 
 # Find dependencies
 find_package(PkgConfig REQUIRED)
-find_package(Curses REQUIRED)
-pkg_check_modules(SDL2 REQUIRED sdl2)
 find_package(Threads REQUIRED)
+pkg_check_modules(NCURSES REQUIRED ncurses)
+pkg_check_modules(SDL2 REQUIRED sdl2)
+pkg_check_modules(VTERM REQUIRED vterm)
 
 add_subdirectory(src)
 

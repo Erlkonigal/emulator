@@ -13,7 +13,7 @@ add_executable(tests
     test_main.cc
 )
 
-target_link_libraries(tests PRIVATE emulator Threads::Threads ${SDL2_LIBRARIES})
+target_link_libraries(tests PRIVATE emulator)
 target_include_directories(tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_test(NAME integration_tests COMMAND tests)
@@ -23,5 +23,5 @@ add_executable(display_demo
     display_demo.cc
 )
 
-target_link_libraries(display_demo PRIVATE emulator Threads::Threads ${SDL2_LIBRARIES})
+target_link_libraries(display_demo PRIVATE emulator)
 target_include_directories(display_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
