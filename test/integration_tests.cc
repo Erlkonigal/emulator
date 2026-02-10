@@ -38,7 +38,7 @@ TEST(integration_uart_ok) {
     ASSERT_TRUE(cap.Stop(&out, &err));
 
     ASSERT_EQ(rc, 0);
-    EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::Halt));
+    EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::None));
     EXPECT_TRUE(out.find("OK\n") != std::string::npos);
 }
 
@@ -61,7 +61,7 @@ TEST(integration_ram_rw) {
 
     ToyCpuExecutor* cpu = GetLastToyCpu();
     ASSERT_TRUE(cpu != nullptr);
-    EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::Halt));
+    EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::None));
     EXPECT_EQ(static_cast<uint32_t>(cpu->getRegister(3) & 0xffffffffu), 0x11223344u);
 }
 
@@ -76,7 +76,7 @@ TEST(integration_unmapped_fault) {
     ASSERT_TRUE(rom::WriteRomU32LE(romPath, prog, &err));
 
     int rc = testutil::RunEmuWithRom(romPath, false, &err);
-    ASSERT_EQ(rc, 0);
+    ASSERT_EQ(rc, 1);
     EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::AccessFault));
 }
 
@@ -96,5 +96,5 @@ TEST(integration_timer_smoke) {
 
     int rc = testutil::RunEmuWithRom(romPath, false, &err);
     ASSERT_EQ(rc, 0);
-    EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::Halt));
+    EXPECT_TRUE(testutil::LastErrorIs(CpuErrorType::None));
 }

@@ -73,7 +73,16 @@ class TermiosGuard {
 
 public:
     explicit TermiosGuard(int fd, struct termios& newSettings)
-        : mFd(fd), mOriginalSettings(newSettings), mValid(true) {
+        : mFd(fd), mOriginalSettings{}, mValid(true) {
+        if (!isatty(fd)) {
+            mValid = false;
+            return;
+        }
+        if (tcgetattr(fd, &mOriginalSettings) != 0) {
+            LOG_ERROR("Failed to get terminal attributes: %s", strerror(errno));
+            mValid = false;
+            return;
+        }
         if (tcsetattr(fd, TCSANOW, &newSettings) != 0) {
             LOG_ERROR("Failed to set terminal attributes: %s", strerror(errno));
             mValid = false;

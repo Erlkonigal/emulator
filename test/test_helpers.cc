@@ -29,6 +29,9 @@ int RunEmuWithRom(const std::filesystem::path& romPath, bool debug, std::string*
     if (debug) {
         args.push_back("--debug");
     }
+    else {
+        args.push_back("--headless");
+    }
 
     std::vector<char*> argv;
     argv.reserve(args.size());

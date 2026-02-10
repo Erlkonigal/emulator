@@ -27,6 +27,7 @@ void printUsage(const char* exe) {
         "  --log-level <lvl>     Set log level (trace, debug, info, warn, error)\n"
         "  --log-filename <path> Set log file path (device->name.out, other->name.err)\n"
         "  --enable-log          Enable separate logging (splits device/other output)\n"
+        "  --headless            Run without SDL window (headless mode)\n"
         "  --help, -h            Show this help\n",
         name);
 }
@@ -194,6 +195,10 @@ bool parseArgs(int argc, char** argv, EmulatorConfig* config, std::string* error
         }
         if (arg == "--enable-log") {
             config->enableLog = true;
+            continue;
+        }
+        if (arg == "--headless") {
+            config->headless = true;
             continue;
         }
         if (!arg.empty() && arg[0] == '-') {

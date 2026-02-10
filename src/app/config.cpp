@@ -72,6 +72,17 @@ bool applyConfigValue(EmulatorConfig* config, const std::string& key, const std:
         config->enableLog = flag;
         return true;
     }
+    if (key == "headless") {
+        bool flag = false;
+        if (!parseBool(value, &flag)) {
+            if (error != nullptr) {
+                *error = "Invalid headless value: " + value;
+            }
+            return false;
+        }
+        config->headless = flag;
+        return true;
+    }
     if (key == "width") {
         uint64_t parsed = 0;
         if (!parseU64(value, &parsed) || parsed > std::numeric_limits<uint32_t>::max()) {

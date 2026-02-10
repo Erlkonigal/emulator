@@ -137,9 +137,16 @@ int RunEmulator(int argc, char** argv) {
     bus.registerDevice(&timer, config.timerBase, kTimerSize, "TIMER");
 
     SdlDisplayDevice sdl;
-    if (!sdl.init(config.width, config.height, config.windowTitle.c_str())) {
-        std::fprintf(stderr, "error: SDL initialization failed\n");
-        return 1;
+    if (config.headless) {
+        if (!sdl.initHeadless(config.width, config.height)) {
+            std::fprintf(stderr, "error: SDL headless initialization failed\n");
+            return 1;
+        }
+    } else {
+        if (!sdl.init(config.width, config.height, config.windowTitle.c_str())) {
+            std::fprintf(stderr, "error: SDL initialization failed\n");
+            return 1;
+        }
     }
     bus.registerDevice(&sdl, config.sdlBase, sdl.getMappedSize(), "SDL");
     bus.registerDevice(&ram, config.ramBase, config.ramSize, "RAM");

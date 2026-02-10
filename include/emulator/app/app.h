@@ -41,6 +41,7 @@ struct EmulatorConfig {
     bool iTrace = false;
     bool mTrace = false;
     bool bpTrace = false;
+    bool headless = false;
     std::string logLevel = "info";
     std::string logFilename = "";
     bool enableLog = false;

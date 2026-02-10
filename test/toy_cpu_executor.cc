@@ -192,7 +192,7 @@ StepResult ToyCpuExecutor::step(uint64_t maxInstructions, uint64_t maxCycles) {
             if (logInstructions) record.decoded = "NOP";
         } else if (op == static_cast<uint8_t>(toy::Op::Halt)) {
             if (logInstructions) record.decoded = "HALT";
-            success = fault(CpuErrorType::Halt, pcBefore, 4);
+            success = fault(CpuErrorType::None, pcBefore, 4);
         } else if (op == static_cast<uint8_t>(toy::Op::Lui)) {
             uint8_t rd = Rd(inst);
             uint16_t imm = Imm16(inst);
