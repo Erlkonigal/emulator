@@ -2,12 +2,12 @@
 #include "emulator/device/device.h"
 #include "emulator/device/uart.h"
 #include "emulator/device/display.h"
-#include "emulator/app/app.h" // For kDefault... constants if needed, but mainly for ToLower/TrimInPlace utils
+#include "emulator/app/app.h"
 #include "emulator/app/utils.h"
 #include "emulator/debugger/expression_parser.h"
-#include "emulator/logging/logging.h" 
+#include "emulator/logging/logging.h"
 
-#include "emulator/app/terminal.h" // Include the new Terminal header
+#include "emulator/app/terminal.h"
 
 #include <algorithm>
 #include <cctype>
@@ -22,8 +22,6 @@
 #include <poll.h>
 #include <iomanip>
 
-
-// Helper functions (moved from app/runtime.cpp/emulator.cpp)
 namespace {
 
 std::string FormatAccessType(MemAccessType type) {
@@ -50,7 +48,6 @@ std::string DefaultFormatter(const TraceRecord& record, const TraceOptions& opti
         ss << " ";
     }
 
-
     if (options.LogBranchPrediction && record.IsBranch) {
         ss << "BP:(T:" << (record.Branch.Taken ? "1" : "0") << " "
            << "P:" << (record.Branch.PredictedTaken ? "1" : "0") << " "
@@ -58,7 +55,6 @@ std::string DefaultFormatter(const TraceRecord& record, const TraceOptions& opti
            << "PTarget:0x" << std::hex << record.Branch.PredictedTarget << ")";
         ss << " ";
     }
-
 
     if (options.LogMemEvents && !record.MemEvents.empty()) {
         ss << "Mem:[";
@@ -81,7 +77,6 @@ std::string DefaultFormatter(const TraceRecord& record, const TraceOptions& opti
 } // namespace
 
 constexpr uint32_t kInstructionsPerBatch = 1000;
-// kCyclesPerBatch is now calculated dynamically
 constexpr auto kPresentInterval = std::chrono::milliseconds(16);
 
 Debugger::Debugger(ICpuExecutor* cpu, MemoryBus* bus)
@@ -102,7 +97,6 @@ void Debugger::RegisterCommands() {
         {"mem", "Dump memory (mem <addr> <len>)", &Debugger::CmdMem},
         {"eval", "Evaluate an expression (eval <expr>)", &Debugger::CmdEval},
         {"bp", "Manage breakpoints (bp list|add <addr>|del <addr>)", &Debugger::CmdBp},
-        {"input", "Enter UART input mode (press Ctrl+D to exit)", &Debugger::CmdInput},
         {"log", "Set log level (log trace|debug|info|warn|error)", &Debugger::CmdLog},
         {"help", "Show this help message", &Debugger::CmdHelp}
     };
@@ -119,7 +113,6 @@ void Debugger::SetCpuFrequency(uint32_t cpuFreq) {
 
             uint32_t freq = device->GetUpdateFrequency();
             if (freq > 0) {
-                // Ensure at least 1 cycle to prevent div-by-zero or zero-step issues
                 uint32_t threshold = std::max(1u, CpuFrequency / freq);
                 device->SetSyncThreshold(threshold);
 
@@ -132,7 +125,6 @@ void Debugger::SetCpuFrequency(uint32_t cpuFreq) {
     if (anyDevice) {
         SyncThresholdCycles = minThreshold;
     } else {
-        // Default to approx 60Hz if no specific devices
         if (CpuFrequency > 0) {
             SyncThresholdCycles = std::max(1u, CpuFrequency / 60);
         } else {
@@ -225,26 +217,46 @@ void Debugger::SetRegisterCount(uint32_t count) {
 void Debugger::Run(bool interactive) {
     IsInteractive = interactive;
     State.State.store(interactive ? CpuState::Pause : CpuState::Running, std::memory_order_release);
-    
+
     if (interactive) {
         m_Terminal = std::make_unique<Terminal>();
-        UpdateStatusDisplay(); // Initial status
+
+        m_Terminal->SetOnCommand([this](const std::string& cmd) {
+            std::lock_guard<std::mutex> lock(Mutex);
+            // LOG_INFO("> %s", cmd.c_str());
+            bool result = this->ProcessCommand(cmd);
+            m_Terminal->UpdateLastCommandSuccess(result);
+            this->UpdateStatusDisplay();
+        });
+
+        m_Terminal->SetOnInput([this](const std::string& data) {
+            if (!Bus) return;
+            UartDevice* uart = static_cast<UartDevice*>(Bus->GetDevice("UART"));
+            if (uart) {
+                for (char c : data) {
+                    uart->PushRx(static_cast<uint8_t>(c));
+                }
+            }
+        });
+
+        SetupUart();
+        SetupLogging();
+        UpdateStatusDisplay();
     }
 
     std::thread cpuThread(&Debugger::CpuThreadLoop, this);
     std::thread sdlThread;
-    
+
     if (Sdl) {
         sdlThread = std::thread(&Debugger::SdlThreadLoop, this);
     }
 
     if (interactive) {
-        CliLoop();
+        m_Terminal->RunInputLoop();
     } else {
         InputLoop();
     }
 
-    // Signal finish
     State.ShouldExit.store(true, std::memory_order_release);
     Control.Cv.notify_all();
 
@@ -254,8 +266,31 @@ void Debugger::Run(bool interactive) {
     if (Sdl) {
         Sdl->Shutdown();
     }
-    
+
     m_Terminal.reset();
+}
+
+void Debugger::SetupUart() {
+    if (!m_Terminal || !Bus) return;
+
+    UartDevice* uart = static_cast<UartDevice*>(Bus->GetDevice("UART"));
+    if (uart) {
+        auto handler = [this](const std::string& text) {
+            for (char ch : text) {
+                m_Terminal->PrintChar(static_cast<uint8_t>(ch));
+            }
+        };
+        uart->SetTxHandler(handler);
+    }
+}
+
+void Debugger::SetupLogging() {
+    if (!m_Terminal) return;
+
+    auto outputHandler = [this](const char* msg) {
+        m_Terminal->PrintLog("INFO", msg);
+    };
+    LogSetOutputHandler(outputHandler);
 }
 
 void Debugger::CpuThreadLoop() {
@@ -266,7 +301,7 @@ void Debugger::CpuThreadLoop() {
     auto lastUpdate = std::chrono::steady_clock::now();
     m_LastCpsTime = lastUpdate;
     m_LastCpsCycles = Cpu->GetCycle();
-    
+
     while (!State.ShouldExit.load(std::memory_order_acquire)) {
         uint32_t steps = 0;
         bool stepping = false;
@@ -300,41 +335,39 @@ void Debugger::CpuThreadLoop() {
             }
 
             StepResult result = Cpu->Step(steps, SyncThresholdCycles);
-            
+
             m_TotalInstructions += result.InstructionsExecuted;
             m_LastStepSuccess = result.Success;
 
             if (!result.Success) {
-                 // If the CPU hits an error (or HALT), we transition to Halted state.
-                 State.State.store(CpuState::Halted, std::memory_order_release);
-                 Control.Cv.notify_all();
-                 LOG_ERROR("CPU Halted or Encountered Error at 0x%llx", (unsigned long long)Cpu->GetPc());
+                State.State.store(CpuState::Halted, std::memory_order_release);
+                Control.Cv.notify_all();
+                LOG_ERROR("CPU Halted or Encountered Error at 0x%llx", (unsigned long long)Cpu->GetPc());
             }
 
             Bus->SyncAll(Cpu->GetCycle());
-            
+
             if (stepping && !State.ShouldExit.load(std::memory_order_acquire)) {
                 State.State.store(CpuState::Pause, std::memory_order_release);
             }
 
             if (stepping || !result.Success) {
-                 UpdateStatusDisplay();
+                UpdateStatusDisplay();
             } else {
-                 auto now = std::chrono::steady_clock::now();
-                 
-                 // Synchronized CPS and Display Update (every 30ms)
-                 if (now - lastUpdate > std::chrono::milliseconds(30)) {
-                      double dt = std::chrono::duration<double>(now - lastUpdate).count();
-                      uint64_t currentCycles = Cpu->GetCycle();
-                      if (dt > 0) {
-                          double dCycles = static_cast<double>(currentCycles - m_LastCpsCycles);
-                          m_CurrentCPS.store(dCycles / dt, std::memory_order_release);
-                      }
-                      m_LastCpsCycles = currentCycles;
-                      
-                      UpdateStatusDisplay();
-                      lastUpdate = now;
-                 }
+                auto now = std::chrono::steady_clock::now();
+
+                if (now - lastUpdate > std::chrono::milliseconds(30)) {
+                       double dt = std::chrono::duration<double>(now - lastUpdate).count();
+                       uint64_t currentCycles = Cpu->GetCycle();
+                       if (dt > 0) {
+                           double dCycles = static_cast<double>(currentCycles - m_LastCpsCycles);
+                           m_CurrentCPS.store(dCycles / dt, std::memory_order_release);
+                       }
+                       m_LastCpsCycles = currentCycles;
+
+                       UpdateStatusDisplay();
+                       lastUpdate = now;
+                }
             }
     }
 }
@@ -363,162 +396,6 @@ void Debugger::SdlThreadLoop() {
     }
 }
 
-void Debugger::CliLoop() {
-    if (Bus == nullptr || !m_Terminal) {
-        return;
-    }
-    UartDevice* uart = static_cast<UartDevice*>(Bus->GetDevice("UART"));
-
-    // CLI State
-    std::string lineBuffer;
-    size_t cursorPos = 0;
-    std::vector<std::string> history;
-    size_t historyIndex = 0;
-    
-    // Set unified log output handler using Terminal
-    auto outputHandler = [&](const char* msg) {
-        m_Terminal->PrintLog(msg);
-    };
-    LogSetOutputHandler(outputHandler);
-
-    // Set uart output handler using Terminal
-    auto uartHandler = [&](const std::string& text) {
-        for(auto ch : text) {
-            m_Terminal->PrintChar(ch);
-        }
-    };
-
-    if (uart != nullptr) {
-        uart->SetTxHandler(uartHandler);
-    }
-    
-    // Initial prompt
-    m_Terminal->RefreshLine(lineBuffer, cursorPos);
-
-    while (!State.ShouldExit.load(std::memory_order_acquire)) {
-        Key key = Key::None;
-        char c = 0;
-        // Use non-blocking read with timeout
-        if (!m_Terminal->ReadChar(key, c, 50)) {
-             continue;
-        }
-        
-        std::string commandToProcess;
-        bool shouldProcess = false;
-
-        switch (key) {
-            case Key::Left:
-                if (cursorPos > 0) {
-                    cursorPos--;
-                    m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                }
-                break;
-            case Key::Right:
-                if (cursorPos < lineBuffer.size()) {
-                    cursorPos++;
-                    m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                }
-                break;
-            case Key::Home:
-                cursorPos = 0;
-                m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                break;
-            case Key::End:
-                cursorPos = lineBuffer.size();
-                m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                break;
-            case Key::Up:
-                if (!history.empty()) {
-                    if (historyIndex > 0) {
-                        historyIndex--;
-                        lineBuffer = history[historyIndex];
-                        cursorPos = lineBuffer.size();
-                        m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                    } else if (historyIndex == 0) {
-                         // Already at oldest, ensure we show it
-                        lineBuffer = history[0];
-                        cursorPos = lineBuffer.size();
-                        m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                    }
-                }
-                break;
-            case Key::Down:
-                if (!history.empty()) {
-                    if (historyIndex < history.size()) {
-                        historyIndex++;
-                        if (historyIndex == history.size()) {
-                            lineBuffer.clear();
-                        } else {
-                            lineBuffer = history[historyIndex];
-                        }
-                        cursorPos = lineBuffer.size();
-                        m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                    }
-                }
-                break;
-            case Key::Backspace:
-                if (cursorPos > 0) {
-                    lineBuffer.erase(cursorPos - 1, 1);
-                    cursorPos--;
-                    m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                }
-                break;
-            case Key::Delete:
-                if (cursorPos < lineBuffer.size()) {
-                    lineBuffer.erase(cursorPos, 1);
-                    m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                }
-                break;
-            case Key::Char:
-                lineBuffer.insert(cursorPos, 1, c);
-                cursorPos++;
-                m_Terminal->RefreshLine(lineBuffer, cursorPos);
-                break;
-            case Key::Enter: {
-                // Newline: Finalize current input
-                // std::string historyLine = "dbg> " + lineBuffer;
-                // term.PrintLog(historyLine.c_str());
-
-                if (!lineBuffer.empty() && (history.empty() || history.back() != lineBuffer)) {
-                    history.push_back(lineBuffer);
-                }
-                historyIndex = history.size();
-
-                commandToProcess = lineBuffer;
-                lineBuffer.clear();
-                cursorPos = 0;
-                shouldProcess = true;
-                
-                // Immediately update terminal to show empty prompt on new line
-                m_Terminal->RefreshLine("", 0);
-                break;
-            }
-            default:
-                break;
-        }
-
-        if (shouldProcess) {
-             if (!ProcessCommand(commandToProcess)) {
-                 std::string trimmed = commandToProcess;
-                 TrimInPlace(&trimmed);
-                 if (!trimmed.empty()) {
-                    LogPrint("Unknown command\n");
-                 }
-            }
-            // No need to reprint prompt here, ProcessCommand/LogPrint handles it via Terminal
-        }
-    }
-    
-    // Clear callbacks
-    LogSetOutputHandler(nullptr);
-    
-    if (uart != nullptr) {
-        uart->SetTxHandler(nullptr);
-    }
-    
-    // Terminal destructor will disable raw mode
-}
-
 void Debugger::InputLoop() {
     if (Bus == nullptr) {
         return;
@@ -528,7 +405,6 @@ void Debugger::InputLoop() {
         return;
     }
 
-    // Configure Terminal: Disable Echo and Canonical mode (if stdin is a TTY)
     struct termios oldt, newt;
     bool isTty = isatty(STDIN_FILENO);
     if (isTty) {
@@ -537,8 +413,7 @@ void Debugger::InputLoop() {
         newt.c_lflag &= ~(ICANON | ECHO);
         tcsetattr(STDIN_FILENO, TCSANOW, &newt);
     }
-    
-    // Simple input loop
+
     while (!State.ShouldExit.load(std::memory_order_acquire)) {
          if (State.State.load(std::memory_order_acquire) == CpuState::Halted) {
              break;
@@ -548,7 +423,6 @@ void Debugger::InputLoop() {
          pfd.fd = STDIN_FILENO;
          pfd.events = POLLIN;
 
-         // Wait up to 10ms for input
          int ret = poll(&pfd, 1, 10);
 
          if (ret > 0) {
@@ -557,74 +431,24 @@ void Debugger::InputLoop() {
                  ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
                  if (n > 0) {
                      for (ssize_t i = 0; i < n; ++i) {
-                        uart->PushRx(static_cast<uint8_t>(buf[i]));
+                         uart->PushRx(static_cast<uint8_t>(buf[i]));
                      }
                  } else if (n == 0) {
-                     // EOF
                      break;
                  }
              } else if (pfd.revents & (POLLERR | POLLHUP)) {
                  break;
              }
          } else if (ret < 0) {
-             // Error in poll (possibly EINTR, or fatal)
              if (errno != EINTR) {
                  break;
              }
          }
-
-         // No explicit sleep needed as poll waits
     }
 
-    // Restore Terminal
     if (isTty) {
         tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
     }
-}
-
-void Debugger::DebugUartInputLoop() {
-    if (Bus == nullptr || m_Terminal == nullptr) {
-        return;
-    }
-    
-    UartDevice* uart = static_cast<UartDevice*>(Bus->GetDevice("UART"));
-    if (uart == nullptr) {
-        return;
-    }
-
-    m_Terminal->SetInputMode(true);
-    
-    while (!State.ShouldExit.load(std::memory_order_acquire)) {
-        struct pollfd pfd;
-        pfd.fd = STDIN_FILENO;
-        pfd.events = POLLIN;
-
-        int ret = poll(&pfd, 1, 50);
-        
-        if (ret > 0 && (pfd.revents & POLLIN)) {
-            char buf[64];
-            ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-            if (n > 0) {
-                for (ssize_t i = 0; i < n; ++i) {
-                    // Ctrl+D (ASCII 4) exits input mode
-                    if (static_cast<unsigned char>(buf[i]) == 4) {
-                        m_Terminal->SetInputMode(false);
-                        m_Terminal->RefreshLine("", 0);
-                        return;
-                    }
-                    uart->PushRx(static_cast<uint8_t>(buf[i]));
-                }
-            } else if (n == 0) {
-                // EOF
-                break;
-            }
-        } else if (ret < 0 && errno != EINTR) {
-            break;
-        }
-    }
-    
-    m_Terminal->SetInputMode(false);
-    m_Terminal->RefreshLine("", 0);
 }
 
 std::vector<uint8_t> Debugger::ScanMemory(uint64_t address, uint32_t length) {
@@ -667,7 +491,7 @@ std::vector<uint64_t> Debugger::ReadRegisters() {
 void Debugger::PrintRegisters() {
     std::vector<uint64_t> regs = ReadRegisters();
     for (uint32_t regId = 0; regId < regs.size(); ++regId) {
-        LogPrint("r%u = 0x%llx\n", regId, static_cast<unsigned long long>(regs[regId]));
+        LOG_INFO("r%u = 0x%llx", regId, (unsigned long long)regs[regId]);
     }
 }
 
@@ -753,6 +577,11 @@ bool Debugger::CmdStep(std::istringstream& args) {
 
 bool Debugger::CmdPause(std::istringstream& args) {
     (void)args;
+    
+    if (State.State.load(std::memory_order_acquire) == CpuState::Halted) {
+        return true;
+    }
+
     State.State.store(CpuState::Pause, std::memory_order_release);
     UpdateStatusDisplay();
     return true;
@@ -762,6 +591,10 @@ bool Debugger::CmdQuit(std::istringstream& args) {
     (void)args;
     State.ShouldExit.store(true, std::memory_order_release);
     Control.Cv.notify_all();
+    
+    if (m_Terminal) {
+        m_Terminal->Stop();
+    }
     return true;
 }
 
@@ -779,21 +612,21 @@ bool Debugger::CmdMem(std::istringstream& args) {
         uint64_t addr = EvalExpression(addrStr);
         uint64_t len = EvalExpression(lenStr);
         std::vector<uint8_t> data = ScanMemory(addr, static_cast<uint32_t>(len));
-        
+
         std::string line;
         for (size_t i = 0; i < data.size(); ++i) {
             if (i % 16 == 0) {
                 char header[32];
-                snprintf(header, sizeof(header), "%08llx: ", static_cast<unsigned long long>(addr + i));
+                snprintf(header, sizeof(header), "%08llx: ", (unsigned long long)(addr + i));
                 line += header;
             }
-            
+
             char byteStr[8];
             snprintf(byteStr, sizeof(byteStr), "%02x ", data[i]);
             line += byteStr;
 
             if (i % 16 == 15 || i + 1 == data.size()) {
-                LogPrint("%s\n", line.c_str());
+                LOG_INFO("%s", line.c_str());
                 line.clear();
             }
         }
@@ -807,8 +640,7 @@ bool Debugger::CmdEval(std::istringstream& args) {
     std::getline(args, expr);
     if (!expr.empty()) {
         uint64_t value = EvalExpression(expr);
-        LogPrint("0x%llx (%llu)\n", static_cast<unsigned long long>(value),
-            static_cast<unsigned long long>(value));
+        LOG_INFO("0x%llx (%llu)", (unsigned long long)value, (unsigned long long)value);
         return true;
     }
     return false;
@@ -822,11 +654,11 @@ bool Debugger::CmdBp(std::istringstream& args) {
     if (action == "list" || action.empty()) {
         std::lock_guard<std::mutex> lock(Mutex);
         if (Breakpoints.empty()) {
-            LogPrint("No breakpoints.\n");
+            LOG_INFO("No breakpoints.");
         } else {
-            LogPrint("Breakpoints:\n");
+            LOG_INFO("Breakpoints:");
             for (uint64_t bp : Breakpoints) {
-                LogPrint("  0x%llx\n", (unsigned long long)bp);
+                LOG_INFO("  0x%llx", (unsigned long long)bp);
             }
         }
         return true;
@@ -842,12 +674,6 @@ bool Debugger::CmdBp(std::istringstream& args) {
         return true;
     }
     return false;
-}
-
-bool Debugger::CmdInput(std::istringstream& args) {
-    (void)args;
-    DebugUartInputLoop();
-    return true;
 }
 
 bool Debugger::CmdLog(std::istringstream& args) {
@@ -867,19 +693,18 @@ bool Debugger::CmdLog(std::istringstream& args) {
 
     if (valid) {
         LogSetLevel(level);
-        LogPrint("Log level set to %s\n", levelStr.c_str());
+        LOG_INFO("Log level set to %s", levelStr.c_str());
         return true;
     }
 
-    LogPrint("Usage: log [trace|debug|info|warn|error]\n");
+    LOG_INFO("Usage: log [trace|debug|info|warn|error]");
     return true;
 }
 
 bool Debugger::CmdHelp(std::istringstream& args) {
     (void)args;
-    LogPrint("Available commands:\n");
-    
-    // Determine the longest command name for alignment
+    LOG_INFO("Available commands:");
+
     size_t maxNameLen = 0;
     for (const auto& cmd : Commands) {
         if (cmd.Name.length() > maxNameLen) {
@@ -889,7 +714,7 @@ bool Debugger::CmdHelp(std::istringstream& args) {
 
     for (const auto& cmd : Commands) {
         std::string padding(maxNameLen - cmd.Name.length() + 2, ' ');
-        LogPrint("  %s%s%s\n", cmd.Name.c_str(), padding.c_str(), cmd.Help.c_str());
+        LOG_INFO("  %s%s%s", cmd.Name.c_str(), padding.c_str(), cmd.Help.c_str());
     }
     return true;
 }
@@ -907,17 +732,16 @@ void Debugger::UpdateStatusDisplay() {
 
     uint64_t cycles = GetCpuCycle();
     uint64_t pc = Cpu ? Cpu->GetPc() : 0;
-    
+
     char buffer[256];
-    
+
     double ipc = 0.0;
     if (cycles > 0) {
         ipc = static_cast<double>(m_TotalInstructions.load(std::memory_order_acquire)) / static_cast<double>(cycles);
     }
-    
+
     double cps = m_CurrentCPS.load(std::memory_order_acquire);
-    
-    // Format CPS (e.g., 1.2M, 500K, or raw)
+
     char cpsBuf[32];
     if (cps >= 1000000.0) {
         snprintf(cpsBuf, sizeof(cpsBuf), "%.2fM", cps / 1000000.0);
@@ -927,12 +751,15 @@ void Debugger::UpdateStatusDisplay() {
         snprintf(cpsBuf, sizeof(cpsBuf), "%.0f", cps);
     }
 
-    snprintf(buffer, sizeof(buffer), "CPU: %s | IPC: %.2f | CPS: %s | Instr: %llu | PC: 0x%08llx",
+    const char* focusStr = (m_Terminal->GetFocus() == FocusPanel::VTERM) ? "VTERM" : "DEBUG";
+    const char* cmdStatus = m_LastStepSuccess ? "OK" : "ERR";
+
+    snprintf(buffer, sizeof(buffer), "CPU: %s | Cycles: %llu | CPS: %s | Cmd: %s | Focus: %s",
              stateStr.c_str(),
-             ipc,
+             (unsigned long long)cycles,
              cpsBuf,
-             (unsigned long long)m_TotalInstructions.load(std::memory_order_acquire),
-             (unsigned long long)pc);
-             
+             cmdStatus,
+             focusStr);
+
     m_Terminal->UpdateStatus(buffer);
 }

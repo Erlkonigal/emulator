@@ -93,7 +93,7 @@ public:
     
     void WriteLine(FILE* file, const char* str) {
         if (OutputHandler) {
-            OutputHandler((std::string(str) + "\n").c_str());
+            OutputHandler(str);
         } else if (file) {
             std::fprintf(file, "%s\n", str);
             std::fflush(file);

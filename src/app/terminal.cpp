@@ -2,101 +2,120 @@
 
 #include <curses.h>
 #include <unistd.h>
-#include <poll.h>
 #include <cstring>
+#include <csignal>
+
+static volatile sig_atomic_t g_resize_flag = 0;
+
+static void sigwinch_handler(int sig) {
+    (void)sig;
+    g_resize_flag = 1;
+}
 
 Terminal::Terminal() {
-    // Initialize ncurses
     if (initscr() == nullptr) {
-        // Fallback or error handling if needed, though initscr usually exits on failure
         return;
     }
-    cbreak();               // Line buffering disabled
-    noecho();               // Don't echo while we do getch
-    keypad(stdscr, TRUE);   // Enable special keys (F1, arrows, etc.)
-    scrollok(stdscr, TRUE); // Enable scrolling
-    setscrreg(1, LINES - 2); // Set scrolling region to allow scrolling (excluding status bar and command bar)
-    timeout(0);             // Non-blocking reads by default (we manage blocking via poll)
-    
-    m_Height = LINES;
-    m_LogY = 1; // Start logging below status bar
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+    mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, nullptr);
+    mouseinterval(10);
+    set_escdelay(25);
 
-    m_Running = true;
-    m_DrawingThread = std::thread([this]() {
-        while (m_Running) {
-            DrawGui();
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        }
-    });
+    signal(SIGWINCH, sigwinch_handler);
+
+    m_Height = LINES;
+    SetupWindows();
+
+    curs_set(1);
 }
 
 Terminal::~Terminal() {
-    m_Running = false;
-    if (m_DrawingThread.joinable()) {
-        m_DrawingThread.join();
-    }
     endwin();
 }
 
-void Terminal::SetInputMode(bool enable) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    m_InputMode = enable;
+void Terminal::SetupWindows() {
+    int total_rows = LINES;
+    int total_cols = COLS;
+
+    if (status_win_) delwin(status_win_);
+    if (vterm_border_) delwin(vterm_border_);
+    if (debug_win_) delwin(debug_win_);
+
+    status_win_ = newwin(1, total_cols, 0, 0);
+    vterm_border_ = newwin(total_rows - 2, total_cols, 1, 0);
+    debug_win_ = newwin(1, total_cols, total_rows - 1, 0);
+
+    scrollok(status_win_, FALSE);
+    scrollok(vterm_border_, FALSE);
+    scrollok(debug_win_, FALSE);
+
+    int vterm_rows = total_rows - 4;
+    int vterm_cols = total_cols - 2;
+    WINDOW* vterm_win = derwin(vterm_border_, vterm_rows, vterm_cols, 1, 1);
+
+    vterm_mgr_.Initialize(vterm_rows, vterm_cols);
+    vterm_mgr_.SetWindow(vterm_win);
+    vterm_mgr_.SetFocus(true);
+
+    vterm_mgr_.SetOnOutput([this](const char* s, size_t len) {
+        if (on_input_) {
+            on_input_(std::string(s, len));
+        }
+    });
+
+    keypad(debug_win_, TRUE);
+    keypad(vterm_win, TRUE);
+
+    wtimeout(debug_win_, 10);
+    wtimeout(vterm_win, 10);
 }
 
-bool Terminal::IsInputMode() const {
-    return m_InputMode;
-}
-
-void Terminal::DrawGui() {
+void Terminal::RenderAll() {
     std::lock_guard<std::mutex> lock(m_Mutex);
-    // 0. Erase all
-    setscrreg(0, LINES - 1);
-    clear();
 
-    // 1. Draw Status Bar
-    move(0, 0);
-    attron(A_REVERSE);
+    werase(status_win_);
     
+    std::string status = m_CurrentStatus;
+    if (focus_ == FocusPanel::VTERM) {
+        status += " | [VTERM]";
+    } else {
+        status += " | [DEBUG] ";
+    }
+
     int width = COLS;
-    std::string line = m_CurrentStatus;
-    if (line.length() < static_cast<size_t>(width)) {
-        line.append(width - line.length(), ' ');
+    if (static_cast<int>(status.length()) < width) {
+        status.append(width - status.length(), ' ');
     } else {
-        line = line.substr(0, width);
-    }
-    
-    printw("%s", line.c_str());
-    attroff(A_REVERSE);
-
-    // 2. Draw Log Area
-    setscrreg(1, LINES - 2);
-    move(1, 0);
-    for (const auto& log : m_LogHistory) {
-        printw("%s", log.c_str());
+        status = status.substr(0, width);
     }
 
-    // 3. Draw Prompt or Input Mode Prompt
-    setscrreg(0, LINES - 1);
-    int promptY = LINES - 1;
-    if (m_InputMode) {
-        getyx(stdscr, m_LogY, m_LogX); // Save current cursor position in log area
-        // In input mode, show a centered prompt in reverse video
-        attron(A_REVERSE);
-        int padding = (COLS - static_cast<int>(m_InputModePrompt.length()) - 2) / 2;
-        if (padding < 0) padding = 0;
-        move(promptY, padding);
-        printw(" %s ", m_InputModePrompt.c_str());
-        attroff(A_REVERSE);
-        move(m_LogY, m_LogX); // Restore cursor to log area
+    mvwprintw(status_win_, 0, 0, "%s", status.c_str());
+    wrefresh(status_win_);
+
+    if (focus_ == FocusPanel::VTERM) {
+        wborder(vterm_border_, '|', '|', '-', '-', '+', '+', '+', '+');
     } else {
-        move(promptY, 0);
-        // Normal prompt mode
-        printw("%s %s", m_DebugModePrompt.c_str(), m_CurrentInput.c_str());
-        // 3. Restore Cursor
-        move(promptY, 5 + m_CursorPos);
+        wborder(vterm_border_, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ');
     }
+    wrefresh(vterm_border_);
+
+    werase(debug_win_);
+    mvwprintw(debug_win_, 0, 0, "dbg> %s", m_DebugInput.c_str());
     
-    refresh();
+    if (focus_ == FocusPanel::DEBUG) {
+        mvwchgat(debug_win_, 0, 5 + m_DebugCursorPos, 1, A_REVERSE, 0, nullptr);
+    }
+
+    if (focus_ == FocusPanel::VTERM) {
+        wrefresh(debug_win_);
+        vterm_mgr_.Render(true);
+    } else {
+        vterm_mgr_.Render(false);
+        wmove(debug_win_, 0, 5 + m_DebugCursorPos);
+        wrefresh(debug_win_);
+    }
 }
 
 void Terminal::UpdateStatus(const std::string& status) {
@@ -104,91 +123,143 @@ void Terminal::UpdateStatus(const std::string& status) {
     m_CurrentStatus = status;
 }
 
-bool Terminal::ReadChar(Key& key, char& out, int timeoutMs) {
-    // Use poll to wait for input without holding the ncurses lock
-    struct pollfd pfd;
-    pfd.fd = STDIN_FILENO;
-    pfd.events = POLLIN;
+void Terminal::UpdateLastCommandSuccess(bool success) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_LastCmdSuccess = success;
+}
 
-    int ret = poll(&pfd, 1, timeoutMs);
+void Terminal::PrintLog(const char* level, const char* msg) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    vterm_mgr_.PushLog(level, msg);
+}
 
-    // Handle input or signal interruption (resize)
-    if ((ret > 0 && (pfd.revents & POLLIN)) || (ret < 0 && errno == EINTR)) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        
-        int ch = getch();
-        
+void Terminal::PrintChar(uint8_t ch) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    vterm_mgr_.PushOutput(&ch, 1);
+}
+
+void Terminal::SwitchFocus() {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+
+    if (focus_ == FocusPanel::VTERM) {
+        focus_ = FocusPanel::DEBUG;
+        vterm_mgr_.HideCursor();
+        vterm_mgr_.SetFocus(false);
+    } else {
+        focus_ = FocusPanel::VTERM;
+        vterm_mgr_.ShowCursor();
+        vterm_mgr_.SetFocus(true);
+    }
+}
+
+void Terminal::HandleMouse(int y, int x) {
+    (void)x;
+    std::lock_guard<std::mutex> lock(m_Mutex);
+
+    if (y >= 1 && y <= LINES - 2) {
+        if (focus_ != FocusPanel::VTERM) {
+            focus_ = FocusPanel::VTERM;
+            vterm_mgr_.ShowCursor();
+            vterm_mgr_.SetFocus(true);
+        }
+    } else if (y == LINES - 1) {
+        if (focus_ != FocusPanel::DEBUG) {
+            focus_ = FocusPanel::DEBUG;
+            vterm_mgr_.HideCursor();
+            vterm_mgr_.SetFocus(false);
+        }
+    }
+}
+
+void Terminal::RunInputLoop() {
+    WINDOW* current_win = vterm_mgr_.GetWindow();
+
+    while (!m_ShouldClose) {
+        if (g_resize_flag) {
+            g_resize_flag = 0;
+            endwin();
+            refresh();
+            clear();
+            m_Height = LINES;
+            SetupWindows();
+            current_win = vterm_mgr_.GetWindow();
+        }
+
+        int ch;
+        if (focus_ == FocusPanel::VTERM) {
+            ch = wgetch(current_win);
+        } else {
+            ch = wgetch(debug_win_);
+        }
+
         if (ch == ERR) {
-            return false;
+        } else if (ch == KEY_MOUSE) {
+            MEVENT event;
+            if (getmouse(&event) == OK) {
+                HandleMouse(event.y, event.x);
+            }
+        } else if (ch == 23) {
+            SwitchFocus();
+        } else if (focus_ == FocusPanel::VTERM) {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            vterm_mgr_.ProcessInput(ch);
+        } else {
+            ProcessDebugInput(ch);
         }
 
-        key = Key::None;
-        out = 0;
-
-        switch (ch) {
-            case KEY_UP: key = Key::Up; break;
-            case KEY_DOWN: key = Key::Down; break;
-            case KEY_LEFT: key = Key::Left; break;
-            case KEY_RIGHT: key = Key::Right; break;
-            case KEY_HOME: key = Key::Home; break;
-            case KEY_END: key = Key::End; break;
-            case KEY_BACKSPACE: 
-            case 127: 
-            case '\b':
-                key = Key::Backspace; 
-                break;
-            case KEY_DC:
-                key = Key::Delete;
-                break;
-            case KEY_ENTER:
-            case '\n': 
-            case '\r':
-                key = Key::Enter;
-                out = '\n';
-                break;
-            case 4: // Ctrl+D (EOF)
-                key = Key::Eof;
-                break;
-            case KEY_RESIZE:
-                m_Height = LINES;
-                key = Key::None; 
-                break;
-            default:
-                if (ch >= 32 && ch < 127) {
-                    key = Key::Char;
-                    out = static_cast<char>(ch);
-                }
-                break;
-        }
-        return key != Key::None;
-    }
-    
-    return false;
-}
-
-void Terminal::PrintLog(const char* msg) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    
-    // Store in history
-    m_LogHistory.push_back(msg);
-    if (m_LogHistory.size() > kMaxLogHistory) {
-        m_LogHistory.pop_front();
+        RenderAll();
     }
 }
 
-void Terminal::PrintChar(char ch) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-
-    m_LogHistory.back().push_back(ch);
+void Terminal::ProcessDebugInput(int ch) {
+    switch (ch) {
+        case '\n':
+        case '\r':
+            if (on_command_ && !m_DebugInput.empty()) {
+                on_command_(m_DebugInput);
+            }
+            m_DebugInput.clear();
+            m_DebugCursorPos = 0;
+            break;
+        case KEY_BACKSPACE:
+        case 127:
+        case '\b':
+            if (m_DebugCursorPos > 0) {
+                m_DebugInput.erase(m_DebugCursorPos - 1, 1);
+                m_DebugCursorPos--;
+            }
+            break;
+        case KEY_DC:
+            if (m_DebugCursorPos < static_cast<int>(m_DebugInput.length())) {
+                m_DebugInput.erase(m_DebugCursorPos, 1);
+            }
+            break;
+        case KEY_LEFT:
+            if (m_DebugCursorPos > 0) m_DebugCursorPos--;
+            break;
+        case KEY_RIGHT:
+            if (m_DebugCursorPos < static_cast<int>(m_DebugInput.length())) m_DebugCursorPos++;
+            break;
+        case KEY_HOME:
+            m_DebugCursorPos = 0;
+            break;
+        case KEY_END:
+            m_DebugCursorPos = m_DebugInput.length();
+            break;
+        default:
+            if (ch >= 32 && ch < 127) {
+                m_DebugInput.insert(m_DebugCursorPos, 1, static_cast<char>(ch));
+                m_DebugCursorPos++;
+            }
+            break;
+    }
 }
 
-void Terminal::RefreshLine(const std::string& inputBuffer, size_t cursorPos) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    
-    m_CurrentInput = inputBuffer;
-    m_CursorPos = cursorPos;
-    
-    // We want to redraw everything including status bar if possible, 
-    // but RefreshLine is called frequently on typing.
-    // However, if we just draw prompt, we might miss pending status update.
+void Terminal::HandleResize() {
+    endwin();
+    refresh();
+    clear();
+
+    m_Height = LINES;
+    SetupWindows();
 }

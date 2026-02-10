@@ -14,6 +14,7 @@
 
 class SdlDisplayDevice;
 class Terminal;
+enum class FocusPanel;
 
 struct CpuControl {
     std::mutex Mutex;
@@ -80,9 +81,10 @@ private:
 
     void CpuThreadLoop();
     void SdlThreadLoop();
-    void CliLoop();
     void InputLoop();
-    void DebugUartInputLoop();
+
+    void SetupUart();
+    void SetupLogging();
 
     bool CmdRun(std::istringstream& args);
     bool CmdStep(std::istringstream& args);
@@ -92,7 +94,6 @@ private:
     bool CmdMem(std::istringstream& args);
     bool CmdEval(std::istringstream& args);
     bool CmdBp(std::istringstream& args);
-    bool CmdInput(std::istringstream& args);
     bool CmdLog(std::istringstream& args);
     bool CmdHelp(std::istringstream& args);
 
@@ -105,7 +106,6 @@ private:
     TraceOptions m_TraceOptions;
     TraceFormatter m_TraceFormatter;
 
-    // CPS Calculation
     std::atomic<double> m_CurrentCPS{0.0};
     std::chrono::steady_clock::time_point m_LastCpsTime;
     uint64_t m_LastCpsCycles = 0;
