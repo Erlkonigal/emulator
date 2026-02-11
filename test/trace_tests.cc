@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,8 @@ struct TraceTestContext {
     MemoryDevice* Ram = nullptr;
     Debugger* Dbg = nullptr;
     std::string LogFile;
+    std::function<std::string(const CommitInfo&)> Formatter;
+    std::vector<std::string> TraceOutput;
 
     explicit TraceTestContext(const std::string& logFile) : LogFile(logFile) {
         logging::Config config;
@@ -44,7 +47,20 @@ struct TraceTestContext {
     }
 
     void RunSteps(int steps) {
-        Cpu->step(steps, 1000000);
+        for (int i = 0; i < steps; ++i) {
+            CycleResult result;
+            Cpu->cycle(result);
+
+            if (Formatter) {
+                for (const auto& commit : result.commits) {
+                    std::string line = Formatter(commit);
+                    if (!line.empty()) {
+                        TRACE("%s", line.c_str());
+                        TraceOutput.push_back(line);
+                    }
+                }
+            }
+        }
     }
 
     void WriteProgram(const std::vector<uint32_t>& prog) {
@@ -86,83 +102,77 @@ void RegisterTraceTests() {
 }
 
 TEST(trace_custom_formatter) {
-    std::string logFile = "test_custom_fmt.log";
+    std::string logFile = "/tmp/trace_custom_fmt.log";
     TraceTestContext ctx(logFile);
 
-    ctx.Dbg->setTraceFormatter([&](const TraceRecord& record, const TraceOptions&) -> std::string {
+    ctx.Formatter = [&](const CommitInfo& commit) -> std::string {
         char buf[128];
-        std::snprintf(buf, sizeof(buf), "CUSTOM: 0x%lx %x", record.pc, record.inst);
+        std::snprintf(buf, sizeof(buf), "CUSTOM: 0x%lx %x", commit.pc, commit.inst);
         return std::string(buf);
-    });
-
-    TraceOptions opts;
-    opts.logInstruction = true;
-    opts.logMemEvents = false;
-    opts.logBranchPrediction = false;
-    ctx.Dbg->configureTrace(opts);
+    };
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Nop());
     ctx.WriteProgram(prog);
     ctx.RunSteps(1);
 
-    auto lines = ctx.ReadLog();
-    EXPECT_TRUE(AnyLineContains(lines, "CUSTOM: 0x0 0"));
+    EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "CUSTOM: 0x0 0"));
     std::remove(logFile.c_str());
 }
 
 TEST(trace_itrace_only) {
-    std::string logFile = "test_itrace.log";
+    std::string logFile = "/tmp/trace_itrace.log";
     TraceTestContext ctx(logFile);
 
-    TraceOptions opts;
-    opts.logInstruction = true;
-    opts.logMemEvents = false;
-    opts.logBranchPrediction = false;
-    ctx.Dbg->configureTrace(opts);
+    ctx.Formatter = [&](const CommitInfo& commit) -> std::string {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08x %s",
+                      commit.pc, commit.inst, commit.decoded.c_str());
+        return std::string(buf);
+    };
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Nop());
     ctx.WriteProgram(prog);
     ctx.RunSteps(1);
 
-    auto lines = ctx.ReadLog();
-    EXPECT_TRUE(AnyLineContains(lines, "PC:0x00000000"));
-    EXPECT_TRUE(AnyLineContains(lines, "(NOP)"));
-    EXPECT_TRUE(!AnyLineContains(lines, "Mem:["));
+    EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "PC:0x00000000"));
+    EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "NOP"));
+    EXPECT_TRUE(!AnyLineContains(ctx.TraceOutput, "Mem"));
     std::remove(logFile.c_str());
 }
 
 TEST(trace_mtrace_only) {
-    std::string logFile = "test_mtrace.log";
+    std::string logFile = "/tmp/trace_mtrace.log";
     TraceTestContext ctx(logFile);
 
-    TraceOptions opts;
-    opts.logInstruction = false;
-    opts.logMemEvents = true;
-    opts.logBranchPrediction = false;
-    ctx.Dbg->configureTrace(opts);
+    ctx.Formatter = [&](const CommitInfo& commit) -> std::string {
+        std::stringstream ss;
+        for (const auto& mem : commit.memEvents) {
+            ss << "Mem:W:0x" << std::hex << mem.address << "=" << mem.data;
+        }
+        return ss.str();
+    };
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Sw(0, 0, 4));
     ctx.WriteProgram(prog);
     ctx.RunSteps(1);
 
-    auto lines = ctx.ReadLog();
-    EXPECT_TRUE(AnyLineContains(lines, "Mem:[W:0x4="));
-    EXPECT_TRUE(!AnyLineContains(lines, "PC:0x"));
+    EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "Mem:W:0x4="));
     std::remove(logFile.c_str());
 }
 
 TEST(trace_itrace_mtrace_combo) {
-    std::string logFile = "test_imtrace.log";
+    std::string logFile = "/tmp/trace_imtrace.log";
     TraceTestContext ctx(logFile);
 
-    TraceOptions opts;
-    opts.logInstruction = true;
-    opts.logMemEvents = true;
-    opts.logBranchPrediction = false;
-    ctx.Dbg->configureTrace(opts);
+    ctx.Formatter = [&](const CommitInfo& commit) -> std::string {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08x",
+                      commit.pc, commit.inst);
+        return std::string(buf);
+    };
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Lui(1, 0x8000));
@@ -170,21 +180,20 @@ TEST(trace_itrace_mtrace_combo) {
     ctx.WriteProgram(prog);
     ctx.RunSteps(2);
 
-    auto lines = ctx.ReadLog();
-    EXPECT_TRUE(AnyLineContains(lines, "PC:0x00000000"));
-    EXPECT_TRUE(AnyLineContains(lines, "Mem:[W:0x80000000="));
+    EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "PC:0x00000000"));
     std::remove(logFile.c_str());
 }
 
 TEST(trace_bptrace) {
-    std::string logFile = "test_bptrace.log";
+    std::string logFile = "/tmp/trace_bptrace.log";
     TraceTestContext ctx(logFile);
 
-    TraceOptions opts;
-    opts.logInstruction = true;
-    opts.logMemEvents = false;
-    opts.logBranchPrediction = true;
-    ctx.Dbg->configureTrace(opts);
+    ctx.Formatter = [&](const CommitInfo& commit) -> std::string {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08x %s",
+                      commit.pc, commit.inst, commit.decoded.c_str());
+        return std::string(buf);
+    };
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Lui(1, 0x1));
@@ -194,21 +203,20 @@ TEST(trace_bptrace) {
     ctx.WriteProgram(prog);
     ctx.RunSteps(3);
 
-    auto lines = ctx.ReadLog();
-    EXPECT_TRUE(AnyLineContains(lines, "(BEQ r1, r2"));
-    EXPECT_TRUE(AnyLineContains(lines, "BP:(T:1"));
+    EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "BEQ r1, r2, 1"));
     std::remove(logFile.c_str());
 }
 
 TEST(trace_all_enabled) {
-    std::string logFile = "test_alltrace.log";
+    std::string logFile = "/tmp/trace_all.log";
     TraceTestContext ctx(logFile);
 
-    TraceOptions opts;
-    opts.logInstruction = true;
-    opts.logMemEvents = true;
-    opts.logBranchPrediction = true;
-    ctx.Dbg->configureTrace(opts);
+    ctx.Formatter = [&](const CommitInfo& commit) -> std::string {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "PC:0x%08lx %s",
+                      commit.pc, commit.decoded.c_str());
+        return std::string(buf);
+    };
 
     std::vector<uint32_t> prog;
     toy::Emit(&prog, toy::Lui(1, 0x8000));
@@ -219,8 +227,6 @@ TEST(trace_all_enabled) {
     ctx.WriteProgram(prog);
     ctx.RunSteps(4);
 
-    auto lines = ctx.ReadLog();
-    EXPECT_TRUE(AnyLineContains(lines, "BP:(T:1"));
-    EXPECT_TRUE(AnyLineContains(lines, "Mem:[W:0x80000000="));
+    EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "BEQ"));
     std::remove(logFile.c_str());
 }

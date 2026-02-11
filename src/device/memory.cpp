@@ -20,9 +20,7 @@ bool isAccessValid(const std::vector<uint8_t>& storage, const MemAccess& access)
 MemResponse makeFault(const MemAccess& access) {
     MemResponse response;
     response.success = false;
-    response.error.type = CpuErrorType::AccessFault;
-    response.error.address = access.address;
-    response.error.size = access.size;
+    response.errorType = CpuErrorType::AccessFault;
     return response;
 }
 

@@ -5,6 +5,7 @@
 #include "emulator/app/app.h"
 #include "emulator/app/utils.h"
 #include "emulator/debugger/expression_parser.h"
+#include "emulator/app/app.h"
 #include "emulator/logging/logger.h"
 
 #include "emulator/app/terminal.h"
@@ -24,69 +25,27 @@
 #include <iomanip>
 
 namespace {
-
-std::string formatAccessType(MemAccessType type) {
-    switch (type) {
-    case MemAccessType::Read:
-        return "R";
-    case MemAccessType::Write:
-        return "W";
-    case MemAccessType::Fetch:
-        return "F";
-    }
-    return "?";
-}
-
-std::string defaultFormatter(const TraceRecord& record, const TraceOptions& options) {
-    std::stringstream ss;
-
-    if (options.logInstruction) {
-        ss << "PC:0x" << std::hex << std::setw(8) << std::setfill('0') << record.pc << " ";
-        ss << "Inst:0x" << std::hex << std::setw(8) << std::setfill('0') << record.inst << " ";
-        if (!record.decoded.empty()) {
-            ss << "(" << record.decoded << ")";
-        }
-        ss << " ";
-    }
-
-    if (options.logBranchPrediction && record.isBranch) {
-        ss << "BP:(T:" << (record.branch.taken ? "1" : "0") << " "
-           << "P:" << (record.branch.predictedTaken ? "1" : "0") << " "
-           << "Target:0x" << std::hex << record.branch.target << " "
-           << "PTarget:0x" << std::hex << record.branch.predictedTarget << ")";
-        ss << " ";
-    }
-
-    if (options.logMemEvents && !record.memEvents.empty()) {
-        ss << "Mem:[";
-        bool first = true;
-        for (const auto& event : record.memEvents) {
-            if (event.type == MemAccessType::Fetch) continue;
-
-            if (!first) ss << ", ";
-            ss << formatAccessType(event.type) << ":0x" << std::hex << event.address
-               << "=" << event.data;
-            first = false;
-        }
-        ss << "]";
-        ss << " ";
-    }
-
-    return ss.str();
-}
-
-} // namespace
-
-namespace {
     constexpr size_t kReadBufferSize = 64;
     constexpr int kPollTimeoutMs = 10;
-}
+
+    std::string formatAccessType(MemAccessType type) {
+        switch (type) {
+        case MemAccessType::Read:
+            return "R";
+        case MemAccessType::Write:
+            return "W";
+        case MemAccessType::Fetch:
+            return "F";
+        }
+        return "?";
+    }
+} // namespace
 
 constexpr uint32_t kInstructionsPerBatch = 1000;
 constexpr auto kPresentInterval = std::chrono::milliseconds(16);
 
 Debugger::Debugger(ICpuExecutor* cpu, MemoryBus* bus)
-    : mCpu(cpu), mBus(bus), mTraceFormatter(defaultFormatter) {
+    : mCpu(cpu), mBus(bus) {
     registerCommands();
 }
 
@@ -139,50 +98,98 @@ void Debugger::setCpuFrequency(uint32_t cpuFreq) {
     }
 }
 
-void Debugger::configureTrace(const TraceOptions& options) {
-    mTraceOptions = options;
+void Debugger::configureTrace(const EmulatorConfig* config) {
+    if (!config) return;
+    mEnableITrace = config->iTrace;
+    mEnableMTrace = config->mTrace;
+    mEnableBpTrace = config->bpTrace;
 }
 
-void Debugger::setTraceFormatter(TraceFormatter formatter) {
-    mTraceFormatter = std::move(formatter);
+void Debugger::initDbgArchFromCpu() {
+    if (mCpu == nullptr) return;
+
+    mDbgArch.pc = mCpu->getPc();
+    mDbgArch.cycle = mCpu->getCycle();
+    mDbgArch.regs.resize(mCpu->getRegisterCount());
+    for (uint32_t i = 0; i < mCpu->getRegisterCount(); ++i) {
+        mDbgArch.regs[i] = mCpu->getRegister(i);
+    }
+    mDbgArch.mem.bytes.clear();
 }
 
-void Debugger::logTrace(const TraceRecord& record) {
-    bool logIt = false;
+void Debugger::updateDbgArch(const CommitInfo& commit) {
+    mDbgArch.pc = commit.pc;
 
-    if (mTraceOptions.logBranchPrediction && record.isBranch) {
-        logIt = true;
+    for (const auto& regEvt : commit.regEvents) {
+        if (regEvt.regId < mDbgArch.regs.size()) {
+            mDbgArch.regs[regEvt.regId] = regEvt.newValue;
+        }
     }
-    else if (mTraceOptions.logInstruction) {
-        logIt = true;
-    }
-    else if (mTraceOptions.logMemEvents && !record.memEvents.empty()) {
-        for (const auto& ev : record.memEvents) {
-            if (ev.type != MemAccessType::Fetch) {
-                logIt = true;
-                break;
+
+    for (const auto& memEvt : commit.memEvents) {
+        if (memEvt.type == MemAccessType::Write) {
+            for (uint32_t i = 0; i < memEvt.size; ++i) {
+                uint64_t addr = memEvt.address + i;
+                mDbgArch.mem.bytes[addr] = static_cast<uint8_t>((memEvt.data >> (i * 8)) & 0xff);
             }
         }
     }
 
-    if (!logIt) {
-        return;
-    }
+    mDbgArch.cycle++;
+}
 
-    std::string line;
-    if (mTraceFormatter) {
-        line = mTraceFormatter(record, mTraceOptions);
-    } else {
-        line = defaultFormatter(record, mTraceOptions);
-    }
+void Debugger::flushTraceBatch() {
+    if (mBatchCommits.empty()) return;
+    if (!(mEnableITrace || mEnableMTrace || mEnableBpTrace)) return;
 
-    if (!line.empty()) {
-        TRACE("%s", line.c_str());
+    for (const auto& commit : mBatchCommits) {
+        std::string line = formatTrace(commit);
+        if (!line.empty()) {
+            TRACE("%s", line.c_str());
+        }
     }
 }
 
-const TraceOptions& Debugger::getTraceOptions() const {
-    return mTraceOptions;
+void Debugger::flushTrace() {
+    flushTraceBatch();
+}
+
+std::string Debugger::formatTrace(const CommitInfo& commit) {
+    std::stringstream ss;
+
+    if (mEnableITrace) {
+        ss << "PC:0x" << std::hex << std::setw(8) << std::setfill('0') << commit.pc << " ";
+        ss << "Inst:0x" << std::hex << std::setw(8) << std::setfill('0') << commit.inst << " ";
+        if (!commit.decoded.empty()) {
+            ss << "(" << commit.decoded << ")";
+        }
+        ss << " ";
+    }
+
+    if (mEnableBpTrace && commit.isBranch) {
+        ss << "BP:(T:" << (commit.branch.taken ? "1" : "0") << " "
+           << "P:" << (commit.branch.predictedTaken ? "1" : "0") << " "
+           << "Target:0x" << std::hex << commit.branch.target << " "
+           << "PTarget:0x" << std::hex << commit.branch.predictedTarget << ")";
+        ss << " ";
+    }
+
+    if (mEnableMTrace && !commit.memEvents.empty()) {
+        ss << "Mem:[";
+        bool first = true;
+        for (const auto& event : commit.memEvents) {
+            if (event.type == MemAccessType::Fetch) continue;
+
+            if (!first) ss << ", ";
+            ss << formatAccessType(event.type) << ":0x" << std::hex << event.address
+               << "=" << event.data;
+            first = false;
+        }
+        ss << "]";
+        ss << " ";
+    }
+
+    return ss.str();
 }
 
 MemResponse Debugger::busRead(const MemAccess& access) {
@@ -214,6 +221,7 @@ void Debugger::setRegisterCount(uint32_t count) {
 }
 
 void Debugger::run(bool interactive) {
+    mRunHadError = false;
     mIsInteractive = interactive;
     mState.state.store(interactive ? CpuState::Pause : CpuState::Running, std::memory_order_release);
 
@@ -235,7 +243,7 @@ void Debugger::run(bool interactive) {
                 }
             }
         });
-        
+
         updateStatusDisplay();
         setTerminalLogHandler();
     } else {
@@ -255,7 +263,7 @@ void Debugger::run(bool interactive) {
         runPlainInputLoop();
     }
 
-    mState.shouldExit.store(true, std::memory_order_release);
+    mState.state.store(CpuState::Halted, std::memory_order_release);
     mControl.cv.notify_all();
 
     if (cpuThread.joinable()) cpuThread.join();
@@ -296,11 +304,11 @@ void Debugger::setDefaultLogHandler() {
 }
 
 void Debugger::cpuThreadLoop() {
-    if (mCpu == nullptr || mBus == nullptr) {
-        return;
-    }
+    initDbgArchFromCpu();
 
-    while (!mState.shouldExit.load(std::memory_order_acquire)) {
+    if (mCpu == nullptr || mBus == nullptr) return;
+
+    while (true) {
         uint32_t steps = 0;
         bool stepping = false;
         {
@@ -308,52 +316,73 @@ void Debugger::cpuThreadLoop() {
             mControl.cv.wait(lock, [&]() {
                 CpuState current = mState.state.load(std::memory_order_acquire);
                 uint32_t pending = mState.stepsPending.load(std::memory_order_acquire);
-                bool shouldExit = mState.shouldExit.load(std::memory_order_acquire);
-                return shouldExit ||
+                return current == CpuState::Halted ||
                     current == CpuState::Running ||
                     pending > 0;
             });
-            if (mState.shouldExit.load(std::memory_order_acquire)) {
-                break;
-            }
+
+            auto state = mState.state.load(std::memory_order_acquire);
+            if (state == CpuState::Halted) break;
+            
             uint32_t pending = mState.stepsPending.load(std::memory_order_acquire);
             if (pending > 0) {
                 steps = pending;
                 mState.stepsPending.store(0, std::memory_order_release);
                 stepping = true;
-                if (mState.state.load(std::memory_order_acquire) != CpuState::Running) {
+                if (state != CpuState::Running) {
                     mState.state.store(CpuState::Running, std::memory_order_release);
                 }
-            } else if (mState.state.load(std::memory_order_acquire) == CpuState::Running) {
+            } else if (state == CpuState::Running) {
                 steps = kInstructionsPerBatch;
             }
         }
-        if (steps == 0) {
-            continue;
-        }
 
-        StepResult result = mCpu->step(steps, mSyncThresholdCycles);
+        if (steps == 0) continue;
 
-        mTotalInstructions += result.instructionsExecuted;
+        mBatchCommits.clear();
+        bool halted = false;
 
-        if (!result.success) {
-            mState.state.store(CpuState::Halted, std::memory_order_release);
-            mControl.cv.notify_all();
-            INFO("CPU Halted at 0x%llx", (unsigned long long)mCpu->getPc());
-            if (mCpu->getLastError().type != CpuErrorType::None) {
-                ERROR("Last error: Type=%d Addr=0x%llx Size=%u",
-                            static_cast<int>(mCpu->getLastError().type),
-                            (unsigned long long)mCpu->getLastError().address,
-                            mCpu->getLastError().size);
+        for (uint32_t i = 0; i < steps && !halted; ++i) {
+            CycleResult result;
+            mCpu->cycle(result);
+
+            for (const auto& commit : result.commits) {
+                updateDbgArch(commit);
+
+                if (isBreakpoint(commit.pc)) {
+                    mState.state.store(CpuState::Pause, std::memory_order_release);
+                    halted = true;
+                    break;
+                }
+            }
+
+            mBatchCommits.insert(mBatchCommits.end(),
+                                  result.commits.begin(),
+                                  result.commits.end());
+
+            if (!result.errors.empty()) {
+                mState.state.store(CpuState::Halted, std::memory_order_release);
+                for (const auto& err : result.errors) {
+                    if (err.type != CpuErrorType::None) {
+                        mRunHadError = true;
+                        ERROR("Error: Type=%d PC=0x%llx %s",
+                                static_cast<int>(err.type),
+                                (unsigned long long)err.pc,
+                                err.message.c_str());
+                    }
+                }
+                halted = true;
             }
         }
 
+        flushTraceBatch();
+
         mBus->syncAll(mCpu->getCycle());
 
-        if (stepping && !mState.shouldExit.load(std::memory_order_acquire)) {
+        if (stepping && mState.state.load(std::memory_order_acquire) != CpuState::Halted) {
             mState.state.store(CpuState::Pause, std::memory_order_release);
         }
-        
+
         updateStatusDisplay();
     }
 }
@@ -363,11 +392,11 @@ void Debugger::sdlThreadLoop() {
         return;
     }
     auto lastPresent = std::chrono::steady_clock::now();
-    while (!mState.shouldExit.load(std::memory_order_acquire)) {
+    while (mState.state.load(std::memory_order_acquire) != CpuState::Halted) {
         bool shouldWait = !mSdl->isDirty() && !mSdl->isPresentRequested();
         mSdl->pollEvents(shouldWait ? 8u : 0u);
         if (mSdl->isQuitRequested()) {
-            mState.shouldExit.store(true, std::memory_order_release);
+            mState.state.store(CpuState::Halted, std::memory_order_release);
             mControl.cv.notify_all();
             break;
         }
@@ -410,7 +439,7 @@ void Debugger::runPlainInputLoop() {
         return;
     }
 
-    while (!mState.shouldExit.load(std::memory_order_acquire)) {
+    while (mState.state.load(std::memory_order_acquire) != CpuState::Halted) {
         if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
             break;
         }
@@ -459,37 +488,30 @@ void Debugger::runPlainInputLoop() {
 
 std::vector<uint8_t> Debugger::scanMemory(uint64_t address, uint32_t length) {
     std::vector<uint8_t> data;
-    if (mBus == nullptr || length == 0) {
+    if (length == 0) {
         return data;
     }
 
     data.resize(length);
     for (uint32_t i = 0; i < length; ++i) {
-        MemAccess access;
-        access.address = address + i;
-        access.size = 1;
-        access.type = MemAccessType::Read;
-        MemResponse response = mBus->read(access);
-        if (response.success) {
-            data[i] = static_cast<uint8_t>(response.data & 0xff);
-        } else {
-            data[i] = 0;
-        }
+        auto it = mDbgArch.mem.bytes.find(address + i);
+        data[i] = (it != mDbgArch.mem.bytes.end()) ? it->second : 0;
     }
     return data;
 }
 
 std::vector<uint64_t> Debugger::readRegisters() {
     std::vector<uint64_t> regs;
-    if (mCpu == nullptr) {
-        return regs;
-    }
     if (mRegisterCount == 0) {
-        mRegisterCount = mCpu->getRegisterCount();
+        if (mCpu) {
+            mRegisterCount = mCpu->getRegisterCount();
+        } else {
+            return regs;
+        }
     }
     regs.resize(mRegisterCount);
     for (uint32_t regId = 0; regId < mRegisterCount; ++regId) {
-        regs[regId] = mCpu->getRegister(regId);
+        regs[regId] = getDbgArch().regs[regId];
     }
     return regs;
 }
@@ -583,7 +605,7 @@ bool Debugger::cmdStep(std::istringstream& args) {
 
 bool Debugger::cmdPause(std::istringstream& args) {
     (void)args;
-    
+
     if (mState.state.load(std::memory_order_acquire) == CpuState::Halted) {
         INFO("CPU is halted. Cannot pause.");
         return false;
@@ -596,9 +618,9 @@ bool Debugger::cmdPause(std::istringstream& args) {
 
 bool Debugger::cmdQuit(std::istringstream& args) {
     (void)args;
-    mState.shouldExit.store(true, std::memory_order_release);
+    mState.state.store(CpuState::Halted, std::memory_order_release);
     mControl.cv.notify_all();
-    
+
     if (mTerminal) {
         mTerminal->stop();
     }

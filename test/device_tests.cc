@@ -41,7 +41,7 @@ TEST(device_memory_oob) {
     MemAccess r = MakeAccess(6, 4, MemAccessType::Read);
     MemResponse rr = ram.read(r);
     EXPECT_EQ(rr.success, false);
-    EXPECT_EQ(rr.error.type, CpuErrorType::AccessFault);
+    EXPECT_EQ(rr.errorType, CpuErrorType::AccessFault);
 }
 
 TEST(device_memory_rom_write_fault) {
@@ -49,7 +49,7 @@ TEST(device_memory_rom_write_fault) {
     MemAccess w = MakeAccess(0, 4, MemAccessType::Write, 0xdeadbeefu);
     MemResponse wr = rom.write(w);
     EXPECT_EQ(wr.success, false);
-    EXPECT_EQ(wr.error.type, CpuErrorType::AccessFault);
+    EXPECT_EQ(wr.errorType, CpuErrorType::AccessFault);
 }
 
 TEST(device_uart_status_rx) {
@@ -84,7 +84,7 @@ TEST(device_uart_invalid_access) {
     MemAccess bad = MakeAccess(0x2, 2, MemAccessType::Read);
     MemResponse r = uart.read(bad);
     EXPECT_EQ(r.success, false);
-    EXPECT_EQ(r.error.type, CpuErrorType::AccessFault);
+    EXPECT_EQ(r.errorType, CpuErrorType::AccessFault);
 }
 
 TEST(device_display_headless_regs) {
@@ -168,7 +168,7 @@ TEST(device_display_oob) {
     MemAccess bad = MakeAccess(invalid, 4, MemAccessType::Read);
     MemResponse r = display.read(bad);
     EXPECT_EQ(r.success, false);
-    EXPECT_EQ(r.error.type, CpuErrorType::AccessFault);
+    EXPECT_EQ(r.errorType, CpuErrorType::AccessFault);
 }
 
 TEST(device_timer_large_tick) {

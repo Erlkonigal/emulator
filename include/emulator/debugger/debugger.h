@@ -3,14 +3,18 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <memory>
 
 #include "emulator/bus/bus.h"
 #include "emulator/cpu/cpu.h"
+
+struct EmulatorConfig;
 
 class SdlDisplayDevice;
 class Terminal;
@@ -23,8 +27,18 @@ struct CpuControl {
 
 struct EmulatorRunState {
     std::atomic<CpuState> state{CpuState::Pause};
-    std::atomic<bool> shouldExit{false};
     std::atomic<uint32_t> stepsPending{0};
+};
+
+struct ShadowMemory {
+    std::unordered_map<uint64_t, uint8_t> bytes;
+};
+
+struct DbgArchState {
+    uint64_t pc = 0;
+    uint64_t cycle = 0;
+    std::vector<uint64_t> regs;
+    ShadowMemory mem;
 };
 
 class Debugger : public ICpuDebugger {
@@ -52,10 +66,13 @@ public:
 
     bool isBreakpoint(uint64_t address) override;
 
-    void configureTrace(const TraceOptions& options) override;
-    void setTraceFormatter(TraceFormatter formatter) override;
-    void logTrace(const TraceRecord& record) override;
-    const TraceOptions& getTraceOptions() const override;
+    void configureTrace(const EmulatorConfig* config);
+    void flushTrace();
+    void flushTraceBatch();
+
+    DbgArchState& getDbgArch() { return mDbgArch; }
+    const DbgArchState& getDbgArch() const { return mDbgArch; }
+    bool hadError() const { return mRunHadError; }
 
 private:
     ICpuExecutor* mCpu = nullptr;
@@ -98,16 +115,24 @@ private:
     bool cmdHelp(std::istringstream& args);
 
     void updateStatusDisplay();
+    void initDbgArchFromCpu();
+    void updateDbgArch(const CommitInfo& commit);
 
     std::unique_ptr<Terminal> mTerminal;
     uint64_t mTotalInstructions = 0;
     bool mLastCommandSuccess = true;
 
-    TraceOptions mTraceOptions;
-    TraceFormatter mTraceFormatter;
+    DbgArchState mDbgArch;
+    std::vector<CommitInfo> mCommitsQueue;
+    bool mEnableITrace = false;
+    bool mEnableMTrace = false;
+    bool mEnableBpTrace = false;
+    bool mRunHadError = false;
 
     std::chrono::steady_clock::time_point mLastCpsTime;
     uint64_t mLastCpsCycles = 0;
+
+    std::string formatTrace(const CommitInfo& commit);
 };
 
 #endif

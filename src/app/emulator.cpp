@@ -140,12 +140,7 @@ int RunEmulator(int argc, char** argv) {
     debugger.setRegisterCount(cpu->getRegisterCount());
     debugger.setCpuFrequency(config.cpuFrequency);
     debugger.setSdl(&sdl);
-
-    TraceOptions traceOpts;
-    traceOpts.logInstruction = config.iTrace;
-    traceOpts.logMemEvents = config.mTrace;
-    traceOpts.logBranchPrediction = config.bpTrace;
-    debugger.configureTrace(traceOpts);
+    debugger.configureTrace(&config);
 
     bus.setDebugger(&debugger);
     cpu->setDebugger(&debugger);
@@ -154,5 +149,5 @@ int RunEmulator(int argc, char** argv) {
 
     debugger.run(config.debug);
 
-    return !(cpu->getLastError().type == CpuErrorType::None);
+    return debugger.hadError();
 }

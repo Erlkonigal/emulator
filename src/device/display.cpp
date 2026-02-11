@@ -293,26 +293,20 @@ MemResponse SdlDisplayDevice::handleRead(const MemAccess& access) {
     MemResponse response;
     if (mState == nullptr || access.size == 0 || access.size > sizeof(uint64_t)) {
         response.success = false;
-        response.error.type = CpuErrorType::AccessFault;
-        response.error.address = access.address;
-        response.error.size = access.size;
+        response.errorType = CpuErrorType::AccessFault;
         return response;
     }
     uint64_t mappedSize = getMappedSize();
     if (access.address >= mappedSize || access.address > mappedSize - access.size) {
         response.success = false;
-        response.error.type = CpuErrorType::AccessFault;
-        response.error.address = access.address;
-        response.error.size = access.size;
+        response.errorType = CpuErrorType::AccessFault;
         return response;
     }
     if (access.address < kFrameBufferOffset) {
         uint64_t value = 0;
         if (!readRegister(access.address, &value)) {
             response.success = false;
-            response.error.type = CpuErrorType::AccessFault;
-            response.error.address = access.address;
-            response.error.size = access.size;
+            response.errorType = CpuErrorType::AccessFault;
             return response;
         }
         response.success = true;
@@ -335,25 +329,19 @@ MemResponse SdlDisplayDevice::handleWrite(const MemAccess& access) {
     MemResponse response;
     if (mState == nullptr || access.size == 0 || access.size > sizeof(uint64_t)) {
         response.success = false;
-        response.error.type = CpuErrorType::AccessFault;
-        response.error.address = access.address;
-        response.error.size = access.size;
+        response.errorType = CpuErrorType::AccessFault;
         return response;
     }
     uint64_t mappedSize = getMappedSize();
     if (access.address >= mappedSize || access.address > mappedSize - access.size) {
         response.success = false;
-        response.error.type = CpuErrorType::AccessFault;
-        response.error.address = access.address;
-        response.error.size = access.size;
+        response.errorType = CpuErrorType::AccessFault;
         return response;
     }
     if (access.address < kFrameBufferOffset) {
         if (!writeRegister(access.address, access.data)) {
             response.success = false;
-            response.error.type = CpuErrorType::AccessFault;
-            response.error.address = access.address;
-            response.error.size = access.size;
+            response.errorType = CpuErrorType::AccessFault;
             return response;
         }
         response.success = true;

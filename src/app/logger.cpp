@@ -28,12 +28,6 @@ struct Output {
         if (filename.empty()) {
             mFile = nullptr;
             mOwnsFile = false;
-        } else if (filename == "stdout") {
-            mFile = stdout;
-            mOwnsFile = false;
-        } else if (filename == "stderr") {
-            mFile = stderr;
-            mOwnsFile = false;
         } else {
             mFile = std::fopen(filename.c_str(), "w");
             if (mFile) {

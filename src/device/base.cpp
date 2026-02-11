@@ -8,9 +8,7 @@ MemResponse Device::read(const MemAccess& access) {
     }
     MemResponse response;
     response.success = false;
-    response.error.type = CpuErrorType::DeviceFault;
-    response.error.address = access.address;
-    response.error.size = access.size;
+    response.errorType = CpuErrorType::DeviceFault;
     return response;
 }
 
@@ -20,9 +18,7 @@ MemResponse Device::write(const MemAccess& access) {
     }
     MemResponse response;
     response.success = false;
-    response.error.type = CpuErrorType::DeviceFault;
-    response.error.address = access.address;
-    response.error.size = access.size;
+    response.errorType = CpuErrorType::DeviceFault;
     return response;
 }
 

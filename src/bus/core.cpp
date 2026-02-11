@@ -76,9 +76,7 @@ MemResponse MemoryBus::read(const MemAccess& access) {
     if (mapping == nullptr || mapping->devicePtr == nullptr) {
         MemResponse response;
         response.success = false;
-        response.error.type = CpuErrorType::AccessFault;
-        response.error.address = access.address;
-        response.error.size = access.size;
+        response.errorType = CpuErrorType::AccessFault;
         return response;
     }
 
@@ -92,9 +90,7 @@ MemResponse MemoryBus::write(const MemAccess& access) {
     if (mapping == nullptr || mapping->devicePtr == nullptr) {
         MemResponse response;
         response.success = false;
-        response.error.type = CpuErrorType::AccessFault;
-        response.error.address = access.address;
-        response.error.size = access.size;
+        response.errorType = CpuErrorType::AccessFault;
         return response;
     }
 

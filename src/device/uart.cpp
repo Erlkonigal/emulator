@@ -23,11 +23,11 @@ uint8_t extractByte(uint64_t value) {
 }
 
 MemResponse makeFault(uint64_t address, uint32_t size) {
+    (void)address;
+    (void)size;
     MemResponse response;
     response.success = false;
-    response.error.type = CpuErrorType::AccessFault;
-    response.error.address = address;
-    response.error.size = size;
+    response.errorType = CpuErrorType::AccessFault;
     return response;
 }
 }

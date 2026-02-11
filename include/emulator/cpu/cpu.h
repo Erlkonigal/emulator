@@ -22,13 +22,6 @@ enum class CpuErrorType {
     Halt
 };
 
-struct CpuErrorDetail {
-    CpuErrorType type = CpuErrorType::None;
-    uint64_t address = 0;
-    uint32_t size = 0;
-    uint64_t data = 0;
-};
-
 enum class MemAccessType {
     Read,
     Write,
@@ -46,13 +39,7 @@ struct MemResponse {
     bool success = true;
     uint64_t data = 0;
     uint32_t latencyCycles = 0;
-    CpuErrorDetail error;
-};
-
-struct StepResult {
-    bool success = true;
-    uint64_t instructionsExecuted = 0;
-    uint64_t cyclesExecuted = 0;
+    CpuErrorType errorType = CpuErrorType::None;
 };
 
 struct MemAccessEvent {
@@ -63,6 +50,11 @@ struct MemAccessEvent {
     uint32_t latencyCycles = 0;
 };
 
+struct RegisterEvent {
+    uint32_t regId = 0;
+    uint64_t newValue = 0;
+};
+
 struct BranchDetails {
     bool taken = false;
     uint64_t target = 0;
@@ -70,25 +62,26 @@ struct BranchDetails {
     uint64_t predictedTarget = 0;
 };
 
-struct TraceRecord {
+struct CommitInfo {
     uint64_t pc = 0;
     uint32_t inst = 0;
     std::string decoded;
-    uint64_t cycleBegin = 0;
-    uint64_t cycleEnd = 0;
     std::vector<MemAccessEvent> memEvents;
+    std::vector<RegisterEvent> regEvents;
     bool isBranch = false;
     BranchDetails branch;
-    std::vector<std::pair<std::string, std::string>> extra;
 };
 
-struct TraceOptions {
-    bool logInstruction = true;
-    bool logMemEvents = true;
-    bool logBranchPrediction = true;
+struct ErrorInfo {
+    CpuErrorType type = CpuErrorType::None;
+    std::string message;
+    uint64_t pc = 0;
 };
 
-using TraceFormatter = std::function<std::string(const TraceRecord&, const TraceOptions&)>;
+struct CycleResult {
+    std::vector<CommitInfo> commits;
+    std::vector<ErrorInfo> errors;
+};
 
 class TraceSink;
 
@@ -100,11 +93,6 @@ public:
     virtual MemResponse busWrite(const MemAccess& access) = 0;
     virtual bool isBreakpoint(uint64_t address) = 0;
     virtual bool hasBreakpoints() = 0;
-
-    virtual void configureTrace(const TraceOptions& options) = 0;
-    virtual void setTraceFormatter(TraceFormatter formatter) = 0;
-    virtual void logTrace(const TraceRecord& record) = 0;
-    virtual const TraceOptions& getTraceOptions() const = 0;
 };
 
 class ICpuExecutor {
@@ -112,9 +100,7 @@ public:
     virtual ~ICpuExecutor() = default;
 
     virtual void reset() = 0;
-    virtual StepResult step(uint64_t maxInstructions, uint64_t maxCycles) = 0;
-
-    virtual CpuErrorDetail getLastError() const = 0;
+    virtual void cycle(CycleResult& result) = 0;
 
     virtual uint64_t getPc() const = 0;
     virtual void setPc(uint64_t pc) = 0;

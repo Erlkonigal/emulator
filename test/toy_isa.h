@@ -53,8 +53,8 @@ inline uint32_t Lw(uint8_t rd, uint8_t rs, int8_t off) {
     return EncodeMem(Op::Lw, rd, rs, off);
 }
 
-inline uint32_t Sw(uint8_t rs, uint8_t rd, int8_t off) {
-    return EncodeMem(Op::Sw, rs, rd, off);
+inline uint32_t Sw(uint8_t rd, uint8_t rs, int8_t off) {
+    return EncodeMem(Op::Sw, rd, rs, off);
 }
 
 inline uint32_t Beq(uint8_t r0, uint8_t r1, int8_t off) {
