@@ -1,5 +1,4 @@
 #include "emulator/utils/config.h"
-#include "emulator/app.h"
 #include "emulator/utils/utils.h"
 
 #include <fstream>
@@ -65,41 +64,6 @@ bool applyConfigValue(EmulatorConfig *config, const std::string &key,
     config->logFilename = value;
     return true;
   }
-  if (key == "headless") {
-    bool flag = false;
-    if (!parseBool(value, &flag)) {
-      if (error != nullptr) {
-        *error = "Invalid headless value: " + value;
-      }
-      return false;
-    }
-    config->headless = flag;
-    return true;
-  }
-  if (key == "width") {
-    uint64_t parsed = 0;
-    if (!parseU64(value, &parsed) ||
-        parsed > std::numeric_limits<uint32_t>::max()) {
-      if (error != nullptr) {
-        *error = "Invalid width value: " + value;
-      }
-      return false;
-    }
-    config->width = static_cast<uint32_t>(parsed);
-    return true;
-  }
-  if (key == "height") {
-    uint64_t parsed = 0;
-    if (!parseU64(value, &parsed) ||
-        parsed > std::numeric_limits<uint32_t>::max()) {
-      if (error != nullptr) {
-        *error = "Invalid height value: " + value;
-      }
-      return false;
-    }
-    config->height = static_cast<uint32_t>(parsed);
-    return true;
-  }
   if (key == "ram_base") {
     uint64_t parsed = 0;
     if (!parseU64(value, &parsed)) {
@@ -120,43 +84,6 @@ bool applyConfigValue(EmulatorConfig *config, const std::string &key,
       return false;
     }
     config->ramSize = parsed;
-    return true;
-  }
-  if (key == "uart_base") {
-    uint64_t parsed = 0;
-    if (!parseU64(value, &parsed)) {
-      if (error != nullptr) {
-        *error = "Invalid uart_base value: " + value;
-      }
-      return false;
-    }
-    config->uartBase = parsed;
-    return true;
-  }
-  if (key == "timer_base") {
-    uint64_t parsed = 0;
-    if (!parseU64(value, &parsed)) {
-      if (error != nullptr) {
-        *error = "Invalid timer_base value: " + value;
-      }
-      return false;
-    }
-    config->timerBase = parsed;
-    return true;
-  }
-  if (key == "sdl_base") {
-    uint64_t parsed = 0;
-    if (!parseU64(value, &parsed)) {
-      if (error != nullptr) {
-        *error = "Invalid sdl_base value: " + value;
-      }
-      return false;
-    }
-    config->sdlBase = parsed;
-    return true;
-  }
-  if (key == "title") {
-    config->windowTitle = value;
     return true;
   }
   if (key == "cpu_frequency") {

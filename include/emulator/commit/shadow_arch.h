@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "emulator/cpu/cpu.h"
 #include "emulator/utils/config.h"
 #include "emulator/utils/singleton.h"
@@ -29,9 +31,9 @@ public:
   uint64_t readPc() const { return pc; }
 
 private:
-  uint64_t pc;
-  RegState regs;
-  CsrState csrs;
-  uint8_t mem[kRamSize];
+  uint64_t pc = 0;
+  RegState regs = {};
+  CsrState csrs = {};
+  uint8_t mem[kRamSize] = {};
   friend class Singleton<ShadowArch>;
 };

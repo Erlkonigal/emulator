@@ -4,27 +4,22 @@
 void ShadowArch::update(const CommitInfo &commit) {
   if (!commit.valid) {
     WARN("Invalid commit, maybe triggered by assert");
-    goto _exit;
+    return;
   }
 
   pc = commit.pc;
 
-  if (commit.isRegWrite) {
+  if (commit.isRegWrite && commit.regId < kMaxNumRegisters) {
     regs[commit.regId] = commit.regData;
   }
 
-  if (commit.isMemWrite) {
-    if (Bus::getInstance().contains(commit.memAddress, kRamDeviceName)) {
-      mem[commit.memAddress - kRamBase] = commit.memData;
-    }
+  if (commit.isMemWrite && commit.memAddress < kRamSize) {
+    mem[commit.memAddress] = commit.memData;
   }
 
-  if (commit.isCsrAccess) {
-    for (size_t i = 0; i < std::extent<CsrState>::value; i++) {
+  if (commit.isCsrAccess && commit.csrState) {
+    for (size_t i = 0; i < kMaxNumCsr; i++) {
       csrs[i] = (*commit.csrState)[i];
     }
   }
-
-_exit:
-  return;
 }

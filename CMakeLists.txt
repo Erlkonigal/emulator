@@ -21,11 +21,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Profile")
 endif()
 
 # Find dependencies
-find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
-pkg_check_modules(NCURSES REQUIRED ncurses)
-pkg_check_modules(SDL2 REQUIRED sdl2)
-pkg_check_modules(VTERM REQUIRED vterm)
 
 add_subdirectory(src)
 
@@ -48,7 +44,7 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
         set(CURRENT_PRESET "debug")
     endif()
 
-    file(WRITE "${CMAKE_SOURCE_DIR}/.clangd" 
+    file(WRITE "${CMAKE_SOURCE_DIR}/.clangd"
         "CompileFlags:\n  CompilationDatabase: build/${CURRENT_PRESET}\n")
     message(STATUS "Updated .clangd for preset: ${CURRENT_PRESET}")
 endif()

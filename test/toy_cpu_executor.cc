@@ -28,8 +28,9 @@ int64_t OffsetToWords(int8_t off) { return static_cast<int64_t>(off) * 4; }
 
 ToyCpuExecutor *GetLastToyCpu() { return g_last; }
 
-ToyCpuExecutor::ToyCpuExecutor(std::shared_ptr<IBus> bus) : ICpuExecutor(bus) {
+ToyCpuExecutor::ToyCpuExecutor() {
   g_last = this;
+  mMemory.resize(kMemSize, 0);
   reset();
 }
 
@@ -37,11 +38,13 @@ ToyCpuExecutor::~ToyCpuExecutor() = default;
 
 void ToyCpuExecutor::reset() {
   std::memset(mRegs, 0, sizeof(mRegs));
-  mPc = 0;
+  std::memset(mCsrs, 0, sizeof(mCsrs));
+  mPc = mResetPc;
   mCycle = 0;
+  mLastFault = CpuErrorType::None;
 }
 
-void ToyCpuExecutor::setResetPc(uint64_t pc) { mPc = pc; }
+void ToyCpuExecutor::setResetPc(uint64_t pc) { mResetPc = pc; }
 
 uint64_t ToyCpuExecutor::getPc() const { return mPc; }
 
@@ -51,34 +54,29 @@ uint64_t ToyCpuExecutor::getCycle() const { return mCycle; }
 
 void ToyCpuExecutor::getRegState(RegState &state) const {
   for (size_t i = 0; i < kRegCount && i < kMaxNumRegisters; ++i) {
-    state.regs[i] = mRegs[i];
+    state[i] = mRegs[i];
   }
 }
 
-uint32_t ToyCpuExecutor::getRegisterCount() const { return kRegCount; }
+size_t ToyCpuExecutor::getRegCount() const { return kRegCount; }
 
 void ToyCpuExecutor::getCsrState(CsrState &state) const {
-  (void)state;
-  // No CSRs in toy CPU
+  for (size_t i = 0; i < kCsrCount && i < kMaxNumCsr; ++i) {
+    state[i] = mCsrs[i];
+  }
 }
 
-uint32_t ToyCpuExecutor::getCsrCount() const { return 0; }
+size_t ToyCpuExecutor::getCsrCount() const { return kCsrCount; }
 
 uint64_t ToyCpuExecutor::getRegister(uint32_t regId) const {
-  if (regId >= kRegCount) {
-    return 0;
-  }
-  if (regId == 0) {
+  if (regId >= kRegCount || regId == 0) {
     return 0;
   }
   return mRegs[regId];
 }
 
 void ToyCpuExecutor::setRegister(uint32_t regId, uint64_t value) {
-  if (regId >= kRegCount) {
-    return;
-  }
-  if (regId == 0) {
+  if (regId >= kRegCount || regId == 0) {
     return;
   }
   mRegs[regId] = value;
@@ -86,61 +84,58 @@ void ToyCpuExecutor::setRegister(uint32_t regId, uint64_t value) {
 
 CpuErrorType ToyCpuExecutor::getLastError() const { return mLastFault; }
 
-bool ToyCpuExecutor::fault(CpuErrorType type, uint64_t addr, uint32_t size,
-                           CommitInfo &commit) {
-  (void)addr; // Unused in simplistic fault reporting here
-  (void)size;
-  commit.errorType = type;
-  commit.errorMsg = "Fault occurred"; // Simplified
-  return false;
+void ToyCpuExecutor::writeMem(uint64_t addr, uint32_t data) {
+  if (addr + 4 > mMemory.size()) {
+    return;
+  }
+  mMemory[addr] = data & 0xff;
+  mMemory[addr + 1] = (data >> 8) & 0xff;
+  mMemory[addr + 2] = (data >> 16) & 0xff;
+  mMemory[addr + 3] = (data >> 24) & 0xff;
 }
 
-uint32_t ToyCpuExecutor::fetchU32(uint64_t pc, MemResponse *out,
-                                  CommitInfo &commit) {
-  if (out == nullptr) {
+uint32_t ToyCpuExecutor::readMem(uint64_t addr) const {
+  if (addr + 4 > mMemory.size()) {
     return 0;
   }
-  MemAccess access;
-  access.address = pc;
-  access.size = 4;
-  access.type = MemAccessType::Read; // Fetch is read
-  *out = getBus()->read(access);
-
-  if (out->error != MemErrorType::None) {
-    commit.errorType = CpuErrorType::Stop;
-    commit.errorMsg = "Fetch failed";
-    return 0;
-  }
-  return static_cast<uint32_t>(out->data & 0xffffffffu);
+  return static_cast<uint32_t>(mMemory[addr]) |
+         (static_cast<uint32_t>(mMemory[addr + 1]) << 8) |
+         (static_cast<uint32_t>(mMemory[addr + 2]) << 16) |
+         (static_cast<uint32_t>(mMemory[addr + 3]) << 24);
 }
 
-void ToyCpuExecutor::cycle(CommitState &state) {
+void ToyCpuExecutor::cycle(CommitArray &commits) {
   // We only produce 1 commit per cycle for toy cpu
-  CommitInfo &commit = state.commits[0];
+  CommitInfo &commit = commits[0];
   commit.valid = false;
 
   // Clear other commits
   for (size_t i = 1; i < kMaxNumCommitsPerCycle; ++i) {
-    state.commits[i].valid = false;
+    commits[i].valid = false;
   }
 
   uint64_t pcBefore = mPc;
   commit.pc = mPc;
   // Initialize other fields
-  commit.regWrite = false;
-  commit.memWrite = false;
-  commit.hasCsrAccess = false;
+  commit.isRegWrite = false;
+  commit.isMemWrite = false;
+  commit.isCsrAccess = false;
   commit.errorType = CpuErrorType::None;
+  commit.regId = 0;
+  commit.regData = 0;
+  commit.memAddress = 0;
+  commit.memData = 0;
 
-  MemResponse fetch;
-  uint32_t inst = fetchU32(mPc, &fetch, commit);
-
-  if (fetch.error != MemErrorType::None) {
+  // Fetch instruction
+  if (mPc + 4 > mMemory.size()) {
     commit.valid = true;
+    commit.errorType = CpuErrorType::Stop;
+    commit.errorMsg = "Fetch out of bounds";
     mCycle++;
     return;
   }
 
+  uint32_t inst = readMem(mPc);
   commit.inst = inst;
   mPc += 4;
   mCycle++;
@@ -152,13 +147,15 @@ void ToyCpuExecutor::cycle(CommitState &state) {
   if (op == static_cast<uint8_t>(toy::Op::Nop)) {
     // Nothing
   } else if (op == static_cast<uint8_t>(toy::Op::Halt)) {
-    fault(CpuErrorType::Halt, pcBefore, 4, commit);
+    commit.errorType = CpuErrorType::Halt;
+    commit.errorMsg = "Halt instruction";
+    mLastFault = CpuErrorType::Halt;
   } else if (op == static_cast<uint8_t>(toy::Op::Lui)) {
     uint8_t rd = Rd(inst);
     uint16_t imm = Imm16(inst);
     uint64_t value = static_cast<uint64_t>(imm) << 16;
 
-    commit.regWrite = true;
+    commit.isRegWrite = true;
     commit.regId = rd;
     commit.regData = static_cast<uint32_t>(value);
     setRegister(rd, value);
@@ -167,7 +164,7 @@ void ToyCpuExecutor::cycle(CommitState &state) {
     uint16_t imm = Imm16(inst);
     uint64_t value = getRegister(rd) | static_cast<uint64_t>(imm);
 
-    commit.regWrite = true;
+    commit.isRegWrite = true;
     commit.regId = rd;
     commit.regData = static_cast<uint32_t>(value);
     setRegister(rd, value);
@@ -186,20 +183,14 @@ void ToyCpuExecutor::cycle(CommitState &state) {
     int8_t off = Off8(inst);
     uint64_t addr = getRegister(rs) + static_cast<int64_t>(off);
 
-    MemAccess access;
-    access.address = addr;
-    access.size = 4;
-    access.type = MemAccessType::Read;
-    MemResponse r = getBus()->read(access);
-
-    if (r.error != MemErrorType::None) {
+    if (addr + 4 > mMemory.size()) {
       commit.errorType = CpuErrorType::Stop;
-      commit.errorMsg = "Load failed";
+      commit.errorMsg = "Load out of bounds";
       mLastFault = CpuErrorType::Stop;
     } else {
-      uint32_t value = static_cast<uint32_t>(r.data & 0xffffffffu);
+      uint32_t value = readMem(addr);
 
-      commit.regWrite = true;
+      commit.isRegWrite = true;
       commit.regId = rd;
       commit.regData = value;
 
@@ -210,28 +201,22 @@ void ToyCpuExecutor::cycle(CommitState &state) {
     uint8_t rs = Rs(inst);
     int8_t off = Off8(inst);
     uint64_t addr = getRegister(rs) + static_cast<int64_t>(off);
+    uint32_t data = static_cast<uint32_t>(getRegister(rd) & 0xffffffffu);
 
-    MemAccess access;
-    access.address = addr;
-    access.size = 4;
-    access.type = MemAccessType::Write;
-    access.data = static_cast<uint32_t>(getRegister(rd) & 0xffffffffu);
-    MemResponse w = getBus()->write(access);
-
-    commit.memWrite = true;
+    commit.isMemWrite = true;
     commit.memAddress = addr;
-    commit.memData = access.data;
+    commit.memData = data;
 
-    if (w.error != MemErrorType::None) {
+    if (addr + 4 > mMemory.size()) {
       commit.errorType = CpuErrorType::Stop;
-      commit.errorMsg = "Store failed";
+      commit.errorMsg = "Store out of bounds";
       mLastFault = CpuErrorType::Stop;
+    } else {
+      writeMem(addr, data);
     }
   } else {
-    fault(CpuErrorType::Stop, pcBefore, 4, commit);
+    commit.errorType = CpuErrorType::Stop;
+    commit.errorMsg = "Unknown opcode";
+    mLastFault = CpuErrorType::Stop;
   }
-}
-
-std::shared_ptr<ICpuExecutor> createCpuExecutor(std::shared_ptr<IBus> bus) {
-  return std::make_shared<ToyCpuExecutor>(bus);
 }

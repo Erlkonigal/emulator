@@ -2,8 +2,21 @@
 
 #include <vector>
 
+#include "emulator/app.h"
 #include "emulator/cpu/cpu.h"
 #include "toy_cpu_executor.h"
+
+std::shared_ptr<ICpuExecutor> createCpuExecutor(const std::vector<uint8_t>& romData) {
+  auto cpu = std::make_shared<ToyCpuExecutor>();
+  for (size_t i = 0; i + 3 < romData.size(); i += 4) {
+    uint32_t word = static_cast<uint32_t>(romData[i]) |
+                    (static_cast<uint32_t>(romData[i + 1]) << 8) |
+                    (static_cast<uint32_t>(romData[i + 2]) << 16) |
+                    (static_cast<uint32_t>(romData[i + 3]) << 24);
+    cpu->writeMem(static_cast<uint64_t>(i), word);
+  }
+  return cpu;
+}
 
 namespace testutil {
 
@@ -16,21 +29,15 @@ std::filesystem::path MakeRomPath(const std::string &name) {
 }
 
 int RunEmuWithRom(const std::filesystem::path &romPath, bool debug,
-                  std::string *error) {
+                   std::string *error) {
   std::vector<std::string> args;
   args.push_back("emulator_test");
   args.push_back("--rom");
   args.push_back(romPath.string());
-  args.push_back("--width");
-  args.push_back("16");
-  args.push_back("--height");
-  args.push_back("16");
   args.push_back("--ram-size");
   args.push_back("65536");
   if (debug) {
     args.push_back("--debug");
-  } else {
-    args.push_back("--headless");
   }
 
   std::vector<char *> argv;

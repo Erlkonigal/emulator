@@ -7,6 +7,7 @@
 class CommitQueue : public RingQueue<CommitInfo>,
                     public Singleton<CommitQueue> {
 public:
-  CommitQueue(size_t capacity) : RingQueue<CommitInfo>(capacity) {}
+  explicit CommitQueue(size_t capacity = kDefaultCommitQueueSize)
+      : RingQueue<CommitInfo>(capacity) {}
   friend class Singleton<CommitQueue>;
 };

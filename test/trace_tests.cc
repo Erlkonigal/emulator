@@ -9,18 +9,12 @@
 #include <string>
 #include <vector>
 
-#include "emulator/control/control.h"
-#include "emulator/debug/debugger.h"
-#include "emulator/device/bus.h"
-#include "emulator/device/device.h"
-#include "emulator/device/memory.h"
 #include "emulator/log/logger.h"
 #include "toy_cpu_executor.h"
 #include "toy_isa.h"
 
 namespace {
 
-// Helpers copied/adapted from old ToyCpuExecutor
 uint8_t OpCode(uint32_t inst) {
   return static_cast<uint8_t>((inst >> 24) & 0xff);
 }
@@ -66,11 +60,7 @@ std::string Decode(uint32_t inst) {
 }
 
 struct TraceTestContext {
-  std::shared_ptr<ToyCpuExecutor> Cpu;
-  std::shared_ptr<MemoryBus> Bus;
-  std::shared_ptr<MemoryDevice> Ram;
-  std::shared_ptr<Debugger> Dbg;
-  std::shared_ptr<Controller> Ctrl;
+  std::unique_ptr<ToyCpuExecutor> Cpu;
   std::string LogFile;
   std::function<std::string(const CommitInfo &)> Formatter;
   std::vector<std::string> TraceOutput;
@@ -81,29 +71,18 @@ struct TraceTestContext {
     config.mFile = LogFile;
     logging::init(config);
 
-    Bus = std::make_shared<MemoryBus>();
-    Cpu = std::make_shared<ToyCpuExecutor>(Bus);
-    Ctrl = std::make_shared<Controller>();
-    Dbg = std::make_shared<Debugger>(Ctrl);
-
-    Ram = std::make_shared<MemoryDevice>(1024, false);
-    Bus->registerDevice(Ram, 0, 1024);
-
-    // Debugger auto-attaches or uses passed pointers.
-    // ToyCpuExecutor no longer needs setDebugger.
+    Cpu = std::make_unique<ToyCpuExecutor>();
   }
 
-  ~TraceTestContext() {
-    // Bus, Cpu, Ram, Dbg, Ctrl are shared_ptr
-  }
+  ~TraceTestContext() = default;
 
   void RunSteps(int steps) {
     for (int i = 0; i < steps; ++i) {
-      CommitState state;
-      Cpu->cycle(state);
+      CommitArray commits;
+      Cpu->cycle(commits);
 
       if (Formatter) {
-        for (const auto &commit : state.commits) {
+        for (const auto &commit : commits) {
           if (!commit.valid)
             continue;
           std::string line = Formatter(commit);
@@ -119,12 +98,7 @@ struct TraceTestContext {
   void WriteProgram(const std::vector<uint32_t> &prog) {
     uint64_t addr = 0;
     for (uint32_t inst : prog) {
-      MemAccess access;
-      access.address = addr;
-      access.size = 4;
-      access.type = MemAccessType::Write;
-      access.data = inst;
-      Bus->write(access);
+      Cpu->writeMem(addr, inst);
       addr += 4;
     }
   }
@@ -201,7 +175,7 @@ TEST(trace_mtrace_only) {
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     std::stringstream ss;
-    if (commit.memWrite) {
+    if (commit.isMemWrite) {
       ss << "Mem:W:0x" << std::hex << commit.memAddress << "="
          << commit.memData;
     }

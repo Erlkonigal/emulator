@@ -1,12 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <string>
-#include <vector>
 
-#include "emulator/device/bus.h"
 #include "emulator/utils/config.h"
 
 enum class CpuErrorType {
@@ -49,11 +45,7 @@ using CommitArray = CommitInfo[kMaxNumCommitsPerCycle];
 
 class ICpuExecutor {
 public:
-  explicit ICpuExecutor(std::shared_ptr<IBus> bus) : mBus(bus) {
-    if (!mBus)
-      throw std::invalid_argument("Bus cannot be null");
-  }
-
+  ICpuExecutor() = default;
   virtual ~ICpuExecutor() = default;
 
   ICpuExecutor(const ICpuExecutor &) = delete;
@@ -69,13 +61,4 @@ public:
 
   virtual size_t getRegCount() const = 0;
   virtual size_t getCsrCount() const = 0;
-
-protected:
-  std::shared_ptr<IBus> getBus() const { return mBus; }
-
-private:
-  std::shared_ptr<IBus> mBus;
 };
-
-extern std::shared_ptr<ICpuExecutor>
-createCpuExecutor(std::shared_ptr<IBus> bus);

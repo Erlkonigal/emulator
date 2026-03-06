@@ -10,27 +10,18 @@ class ToyCpuExecutor;
 
 ToyCpuExecutor *GetLastToyCpu();
 
-class Debugger;
-
 class ToyCpuExecutor : public ICpuExecutor {
 public:
-  explicit ToyCpuExecutor(std::shared_ptr<IBus> bus);
+  ToyCpuExecutor();
   ~ToyCpuExecutor() override;
 
   void reset() override;
-  void cycle(CommitState &state) override;
-
-  // Let's check cpu.h again properly.
-  // virtual void getRegState(RegState& state) const = 0;
-  // virtual uint32_t getRegisterCount() const = 0;
-  // virtual void getCsrState(CsrState& state) const = 0;
-  // virtual uint32_t getCsrCount() const = 0;
-  // virtual void setResetPc(uint64_t pc) = 0;
+  void cycle(CommitArray &commits) override;
 
   void getRegState(RegState &state) const override;
-  uint32_t getRegisterCount() const override;
+  size_t getRegCount() const override;
   void getCsrState(CsrState &state) const override;
-  uint32_t getCsrCount() const override;
+  size_t getCsrCount() const override;
   void setResetPc(uint64_t pc) override;
 
   // Helper methods for tests (not overrides)
@@ -41,18 +32,21 @@ public:
   void setRegister(uint32_t regId, uint64_t value);
   CpuErrorType getLastError() const;
 
-  // setDebugger removed from ICpuExecutor.
-  // ToyCpuExecutor needs to access Bus directly via getBus().
+  // Memory access for tests
+  void writeMem(uint64_t addr, uint32_t data);
+  uint32_t readMem(uint64_t addr) const;
 
 private:
-  bool fault(CpuErrorType type, uint64_t addr, uint32_t size,
-             CommitInfo &commit);
-  uint32_t fetchU32(uint64_t pc, MemResponse *out, CommitInfo &commit);
-
   static constexpr uint32_t kRegCount = 16;
+  static constexpr uint32_t kCsrCount = 64;
+  static constexpr uint64_t kMemSize = 1024 * 1024; // 1MB for tests
+
   uint64_t mRegs[kRegCount] = {};
+  uint64_t mCsrs[kCsrCount] = {};
   uint64_t mPc = 0;
   uint64_t mCycle = 0;
+  uint64_t mResetPc = 0;
+  std::vector<uint8_t> mMemory;
 
   CpuErrorType mLastFault = CpuErrorType::None;
 };

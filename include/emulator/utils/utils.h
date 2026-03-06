@@ -6,7 +6,6 @@
 #include <fstream>
 #include <limits>
 #include <string>
-#include <vector>
 
 namespace {
 
@@ -132,25 +131,6 @@ inline bool getFileSize(const std::string &path, uint64_t *size) {
     return false;
   }
   *size = static_cast<uint64_t>(length);
-  return true;
-}
-
-inline bool computeFramebufferSize(uint32_t width, uint32_t height,
-                                   uint64_t *size) {
-  if (size == nullptr) {
-    return false;
-  }
-  if (width == 0 || height == 0) {
-    return false;
-  }
-  uint64_t pixelCount = static_cast<uint64_t>(width) * height;
-  if (pixelCount / width != height) {
-    return false;
-  }
-  if (pixelCount > std::numeric_limits<uint64_t>::max() / 4u) {
-    return false;
-  }
-  *size = pixelCount * 4u;
   return true;
 }
 

@@ -189,22 +189,15 @@ uint64_t ExpressionParser::parseFactor() {
 
 uint64_t ExpressionParser::readMemory(const uint64_t &addr,
                                       const uint32_t &width) {
-  bool inRam = Bus::getInstance().contains(addr, kRamDeviceName);
-  bool inRom = Bus::getInstance().contains(addr, kRomDeviceName);
+  bool inRam = (addr >= kRamBase && addr < kRamBase + kRamSize);
 
-  if (!inRam && !inRom)
+  if (!inRam)
     return 0;
 
   uint64_t val = 0;
   for (uint32_t i = 0; i < width; ++i) {
-    uint8_t byte = 0;
-    if (inRam) {
-      byte = static_cast<uint8_t>(
-          ShadowArch::getInstance().readMem(addr + i - kRamBase));
-    } else if (inRom) {
-      byte = static_cast<uint8_t>(
-          Bus::getInstance().read({BusAccessType::Read, addr + i, 1}).data);
-    }
+    uint8_t byte = static_cast<uint8_t>(
+        ShadowArch::getInstance().readMem(addr + i - kRamBase));
     val |= (static_cast<uint64_t>(byte) << (i * 8));
   }
   return val;

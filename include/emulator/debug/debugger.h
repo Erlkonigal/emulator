@@ -3,17 +3,14 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
-#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
-#include "emulator/cpu/cpu.h"
 #include "emulator/utils/singleton.h"
 
-class Terminal;
+struct EmulatorConfig;
 
 class Debugger : public Singleton<Debugger> {
 public:
@@ -21,8 +18,22 @@ public:
   ~Debugger();
 
   void run(bool interactive);
+  bool hadError() const { return mHadError.load(); }
 
   bool processCommand(const std::string &command);
+
+  void setControlCallbacks(std::function<void()> onRun,
+                           std::function<void(uint32_t)> onStep,
+                           std::function<void()> onPause) {
+    mOnRun = std::move(onRun);
+    mOnStep = std::move(onStep);
+    mOnPause = std::move(onPause);
+  }
+
+  void configureTrace(const EmulatorConfig *config);
+
+  void addBreakpoint(uint64_t address);
+  void removeBreakpoint(uint64_t address);
 
 private:
   struct CommandEntry {
@@ -36,9 +47,6 @@ private:
 
   void runPlainInputLoop();
 
-  void setDefaultLogHandler();
-  void setTerminalLogHandler();
-
   bool cmdRun(std::istringstream &args);
   bool cmdStep(std::istringstream &args);
   bool cmdPause(std::istringstream &args);
@@ -50,19 +58,14 @@ private:
   bool cmdLog(std::istringstream &args);
   bool cmdHelp(std::istringstream &args);
 
-  void updateStatusDisplay();
-
-  std::string formatTrace(const CommitInfo &commit);
-
-  std::function<void(const std::string &)> mOnInput;
   std::function<void()> mOnRun;
   std::function<void(uint32_t)> mOnStep;
   std::function<void()> mOnPause;
 
   std::mutex mMutex;
+  std::vector<uint64_t> mBreakpoints;
 
   bool mIsInteractive = false;
-  std::unique_ptr<Terminal> mTerminal;
   uint64_t mTotalInstructions = 0;
   bool mLastCommandSuccess = true;
 
