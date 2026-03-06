@@ -1,54 +1,15 @@
-#ifndef EMULATOR_DEVICE_DEVICE_H
-#define EMULATOR_DEVICE_DEVICE_H
+#pragma once
 
-#include <cstdint>
-#include <functional>
-#include <string>
-
-#include "emulator/bus/bus.h"
-#include "emulator/cpu/cpu.h"
-
-enum class DeviceType {
-    Ram,
-    Rom,
-    Display,
-    Timer,
-    Uart,
-    Other
-};
+#include "emulator/device/bus.h"
 
 class Device {
 public:
-    using ReadHandler = std::function<MemResponse(const MemAccess& access)>;
-    using WriteHandler = std::function<MemResponse(const MemAccess& access)>;
-    using TickHandler = std::function<void(uint64_t cycles)>;
+  const char *name = nullptr;
 
-    Device();
-    virtual ~Device() = default;
+  Device(const char *name) : name(name) {}
+  virtual ~Device() = default;
 
-    MemResponse read(const MemAccess& access);
-    MemResponse write(const MemAccess& access);
-    void tick(uint64_t cycles);
-    virtual void sync(uint64_t currentCycle);
-    DeviceType getType() const;
-
-    void setReadHandler(ReadHandler handler);
-    void setWriteHandler(WriteHandler handler);
-    void setTickHandler(TickHandler handler);
-    void setType(DeviceType type);
-    void setSyncThreshold(uint64_t threshold);
-    
-    virtual uint32_t getUpdateFrequency() const { return 0; }
-
-protected:
-    uint64_t mLastSyncCycle = 0;
-    uint64_t mSyncThreshold = 128;
-
-private:
-    ReadHandler mReadHandler;
-    WriteHandler mWriteHandler;
-    TickHandler mTickHandler;
-    DeviceType mType = DeviceType::Other;
+  virtual BusResponse read(const BusAccess &access) = 0;
+  virtual BusResponse write(const BusAccess &access) = 0;
+  virtual void sync() = 0;
 };
-
-#endif

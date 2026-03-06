@@ -4,15 +4,17 @@
 #include <filesystem>
 #include <string>
 
-#include "emulator/app/app.h"
+#include "emulator/app.h"
+#include "emulator/cpu/cpu.h"
 
 namespace testutil {
 
 std::filesystem::path RomDir();
-std::filesystem::path MakeRomPath(const std::string& name);
+std::filesystem::path MakeRomPath(const std::string &name);
 
-int RunEmuWithRom(const std::filesystem::path& romPath, bool debug, std::string* error);
-bool LastErrorIs(CpuErrorType t);
+int RunEmuWithRom(const std::filesystem::path &romPath, bool debug,
+                  std::string *error);
+bool CheckLastError(CpuErrorType t);
 
 } // namespace testutil
 
