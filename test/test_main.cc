@@ -1,4 +1,4 @@
-#include "test_framework.h"
+#include "framework/test_framework.h"
 
 extern void RegisterIntegrationTests();
 extern void RegisterTraceTests();

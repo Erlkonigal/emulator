@@ -214,6 +214,26 @@ void ToyCpuExecutor::cycle(CommitArray &commits) {
     } else {
       writeMem(addr, data);
     }
+  } else if (op == static_cast<uint8_t>(toy::Op::Add)) {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    uint8_t rt = Off8(inst);
+    uint64_t value = getRegister(rs) + getRegister(rt);
+
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = static_cast<uint32_t>(value);
+    setRegister(rd, value);
+  } else if (op == static_cast<uint8_t>(toy::Op::Sub)) {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    uint8_t rt = Off8(inst);
+    uint64_t value = getRegister(rs) - getRegister(rt);
+
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = static_cast<uint32_t>(value);
+    setRegister(rd, value);
   } else {
     commit.errorType = CpuErrorType::Stop;
     commit.errorMsg = "Unknown opcode";

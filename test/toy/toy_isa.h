@@ -13,6 +13,8 @@ enum class Op : uint8_t {
     Lw = 0x03,
     Sw = 0x04,
     Beq = 0x05,
+    Add = 0x06,
+    Sub = 0x07,
     Halt = 0x7f,
 };
 
@@ -59,6 +61,16 @@ inline uint32_t Sw(uint8_t rd, uint8_t rs, int8_t off) {
 
 inline uint32_t Beq(uint8_t r0, uint8_t r1, int8_t off) {
     return EncodeBranch(Op::Beq, r0, r1, off);
+}
+
+inline uint32_t Add(uint8_t rd, uint8_t rs, uint8_t rt) {
+    return (static_cast<uint32_t>(Op::Add) << 24) | (static_cast<uint32_t>(rd) << 16) |
+           (static_cast<uint32_t>(rs) << 8) | static_cast<uint8_t>(rt);
+}
+
+inline uint32_t Sub(uint8_t rd, uint8_t rs, uint8_t rt) {
+    return (static_cast<uint32_t>(Op::Sub) << 24) | (static_cast<uint32_t>(rd) << 16) |
+           (static_cast<uint32_t>(rs) << 8) | static_cast<uint8_t>(rt);
 }
 
 inline void Emit(std::vector<uint32_t>* prog, uint32_t inst) {

@@ -1,13 +1,13 @@
-#include "test_framework.h"
+#include "framework/test_framework.h"
 
 #include <string>
 #include <vector>
 
-#include "rom_util.h"
-#include "stdout_capture.h"
-#include "test_helpers.h"
-#include "toy_cpu_executor.h"
-#include "toy_isa.h"
+#include "helpers/stdout_capture.h"
+#include "helpers/test_helpers.h"
+#include "toy/rom_util.h"
+#include "toy/toy_cpu_executor.h"
+#include "toy/toy_isa.h"
 
 void RegisterIntegrationTests() {}
 

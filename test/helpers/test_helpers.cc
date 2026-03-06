@@ -4,7 +4,7 @@
 
 #include "emulator/app.h"
 #include "emulator/cpu/cpu.h"
-#include "toy_cpu_executor.h"
+#include "toy/toy_cpu_executor.h"
 
 std::shared_ptr<ICpuExecutor> createCpuExecutor(const std::vector<uint8_t>& romData) {
   auto cpu = std::make_shared<ToyCpuExecutor>();

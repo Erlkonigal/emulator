@@ -1,4 +1,4 @@
-#include "test_framework.h"
+#include "framework/test_framework.h"
 
 #include <cstdio>
 #include <fstream>
@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "emulator/log/logger.h"
-#include "toy_cpu_executor.h"
-#include "toy_isa.h"
+#include "toy/toy_cpu_executor.h"
+#include "toy/toy_isa.h"
 
 namespace {
 
