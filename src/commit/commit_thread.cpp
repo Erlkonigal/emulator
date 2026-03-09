@@ -3,155 +3,162 @@
 #include "emulator/cpu/cpu.h"
 #include "emulator/debug/breakpoint.h"
 #include "emulator/log/logger.h"
+#include "emulator/log/trace_macro.h"
+#include "emulator/log/trace_manager.h"
 #include "emulator/runtime_config.h"
 
 #include <iostream>
 #include <thread>
 #include <vector>
 
-CommitThreadState CommitThread::getState() const {
-  return mState.load(std::memory_order_acquire);
+void CommitThread::init() {
+    TraceManager::getInstance().createTracer<Tracer>("itrace");
 }
 
 void CommitThread::start() {
-  mStarted.store(true, std::memory_order_release);
-  mState.store(CommitThreadState::Paused, std::memory_order_release);
-  mThread = std::thread(&CommitThread::threadLoop, this);
+    setStarted(true);
+    mStateMachine.forceTransition(CommitThreadState::Paused);
+    mThread = std::thread(&CommitThread::threadLoop, this);
 }
 
 void CommitThread::stop() {
-  mState.store(CommitThreadState::Halted, std::memory_order_release);
-  if (mThread.joinable()) {
-    mThread.join();
-  }
+    mStateMachine.forceTransition(CommitThreadState::Halted);
+    joinThread();
 }
 
 void CommitThread::reset() {
-  stop();
-  mStepCount.store(0, std::memory_order_release);
-  mStarted.store(false, std::memory_order_release);
+    stop();
+    mStepCount.store(0, std::memory_order_release);
+    setStarted(false);
 }
 
 void CommitThread::run() {
-  mState.store(CommitThreadState::Running, std::memory_order_release);
+    mStateMachine.transition(CommitThreadState::Running);
 }
 
 void CommitThread::step(uint32_t count) {
-  mState.store(CommitThreadState::Step, std::memory_order_release);
-  mStepCount.store(count, std::memory_order_release);
+    mStepCount.store(count, std::memory_order_release);
+    mStateMachine.transition(CommitThreadState::Step);
 }
 
 void CommitThread::pause() {
-  mState.store(CommitThreadState::Paused, std::memory_order_release);
+    mStateMachine.transition(CommitThreadState::Paused);
 }
 
 void CommitThread::threadLoop() {
-  CommitThreadState state;
-  while (true) {
-    state = mState.load(std::memory_order_acquire);
-    switch (state) {
-    case CommitThreadState::Running: {
-      size_t numFrontCommits = 0;
-      CommitInfo *commits = CommitQueue::getInstance().front(
-          kMaxNumCommitsPerConsumption, numFrontCommits);
-      if (numFrontCommits == 0) {
-        std::this_thread::yield();
-        continue;
-      }
-      size_t successCommits = processCommits(commits, numFrontCommits, state);
-      CommitQueue::getInstance().pop(successCommits);
-      if (state != CommitThreadState::Running) {
-        mState.store(state, std::memory_order_release);
-      }
-      break;
-    }
-    case CommitThreadState::Step: {
-      size_t remaining = mStepCount.load(std::memory_order_acquire);
-      if (remaining > 0) {
-        size_t numFrontCommits = 0;
-        CommitInfo *commits =
-            CommitQueue::getInstance().front(remaining, numFrontCommits);
-        if (numFrontCommits == 0) {
-          std::this_thread::yield();
-          continue;
-        }
-        size_t successCommits = processCommits(commits, numFrontCommits, state);
-        CommitQueue::getInstance().pop(successCommits);
-        if (state != CommitThreadState::Step) {
-          mStepCount.store(0, std::memory_order_release);
-          mState.store(state, std::memory_order_release);
-        } else {
-          mStepCount.fetch_sub(successCommits, std::memory_order_release);
-        }
-      } else {
-        mState.store(CommitThreadState::Paused, std::memory_order_release);
-      }
-      break;
-    }
-    case CommitThreadState::Paused:
-      std::this_thread::yield();
-      break;
+    while (true) {
+        CommitThreadState state = mStateMachine.getState();
 
-    case CommitThreadState::Halted:
-      return;
+        switch (state) {
+        case CommitThreadState::Running: {
+            size_t numFrontCommits = 0;
+            CommitInfo *commits = CommitQueue::getInstance().front(
+                kMaxNumCommitsPerConsumption, numFrontCommits);
+            if (numFrontCommits == 0) {
+                std::this_thread::yield();
+                continue;
+            }
+
+            auto result = processCommits(commits, numFrontCommits, state);
+            CommitQueue::getInstance().pop(result.processedCount);
+
+            if (result.nextState != state) {
+                mStateMachine.forceTransition(result.nextState);
+            }
+            break;
+        }
+
+        case CommitThreadState::Step: {
+            size_t remaining = mStepCount.load(std::memory_order_acquire);
+            if (remaining == 0) {
+                mStateMachine.forceTransition(CommitThreadState::Paused);
+                break;
+            }
+
+            size_t numFrontCommits = 0;
+            CommitInfo *commits =
+                CommitQueue::getInstance().front(remaining, numFrontCommits);
+            if (numFrontCommits == 0) {
+                std::this_thread::yield();
+                continue;
+            }
+
+            auto result = processCommits(commits, numFrontCommits, state);
+            CommitQueue::getInstance().pop(result.processedCount);
+
+            if (result.nextState != CommitThreadState::Step) {
+                mStepCount.store(0, std::memory_order_release);
+                mStateMachine.forceTransition(result.nextState);
+            } else {
+                mStepCount.fetch_sub(result.processedCount, std::memory_order_release);
+            }
+            break;
+        }
+
+        case CommitThreadState::Paused:
+            std::this_thread::yield();
+            break;
+
+        case CommitThreadState::Halted:
+            return;
+        }
     }
-  }
 }
 
-size_t CommitThread::processCommits(const CommitInfo *commits,
-                                     const size_t &numCommits,
-                                     CommitThreadState &next) {
-    size_t processed = 0;
+CommitThread::ProcessResult CommitThread::processCommits(const CommitInfo *commits,
+                                                          size_t numCommits,
+                                                          CommitThreadState currentState) {
+    ProcessResult result{0, currentState};
+
     for (size_t i = 0; i < numCommits; i++) {
         const auto &commit = commits[i];
 
-        if (iTrace.isEnabled() && commit.valid) {
-            iTrace.trace("PC=0x%08lx INST=0x%08x %s",
-                 (unsigned long)commit.pc, commit.inst, commit.decode);
+        if (commit.valid) {
+            TRACE("itrace", "PC=0x%08lx INST=0x%08x %s",
+                  (unsigned long)commit.pc, commit.inst, commit.decode);
             if (commit.isRegWrite) {
-                iTrace.trace("         REG x%u <- 0x%08x", commit.regId, commit.regData);
+                TRACE("itrace", "         REG x%u <- 0x%08x", commit.regId, commit.regData);
             }
             if (commit.isMemWrite) {
-                iTrace.trace("         MEM [0x%08lx] <- 0x%08x",
-                     (unsigned long)commit.memAddress, commit.memData);
+                TRACE("itrace", "         MEM [0x%08lx] <- 0x%08x",
+                      (unsigned long)commit.memAddress, commit.memData);
             }
         }
 
-    // handle breakpoint
-    bool breakpointHit =
-        BreakPointController::getInstance().contains(commit.pc);
-    if (breakpointHit) {
-      INFO("Breakpoint hit at pc: 0x%lx", commit.pc);
-      next = CommitThreadState::Paused;
-      goto _exit;
+        bool breakpointHit =
+            BreakPointController::getInstance().contains(commit.pc);
+        if (breakpointHit) {
+            INFO("Breakpoint hit at pc: 0x%lx", commit.pc);
+            result.nextState = CommitThreadState::Paused;
+            result.processedCount++;
+            return result;
+        }
+
+        ShadowArch::getInstance().update(commit);
+
+        switch (commit.errorType) {
+        case CpuErrorType::None:
+            result.processedCount++;
+            break;
+        case CpuErrorType::Stop:
+            INFO("Commit Stop");
+            result.nextState = CommitThreadState::Halted;
+            result.processedCount++;
+            return result;
+        case CpuErrorType::Halt:
+            ERROR("Commit Halt");
+            result.nextState = CommitThreadState::Halted;
+            result.processedCount++;
+            return result;
+        case CpuErrorType::Assert:
+            ERROR("Commit Assert: %s", commit.errorMsg);
+            result.nextState = CommitThreadState::Halted;
+            result.processedCount++;
+            return result;
+        default:
+            assert(false);
+        }
     }
 
-    ShadowArch::getInstance().update(commit);
-
-    switch (commit.errorType) {
-    case CpuErrorType::None:
-      processed++;
-      break;
-    case CpuErrorType::Stop:
-      INFO("Commit Stop");
-      next = CommitThreadState::Halted;
-      processed++;
-      goto _exit;
-    case CpuErrorType::Halt:
-      ERROR("Commit Halt");
-      next = CommitThreadState::Halted;
-      processed++;
-      goto _exit;
-    case CpuErrorType::Assert:
-      ERROR("Commit Assert: %s", commit.errorMsg);
-      next = CommitThreadState::Halted;
-      processed++;
-      goto _exit;
-    default:
-      assert(false);
-    }
-  }
-
-_exit:
-  return processed;
+    return result;
 }

@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <thread>
 
-#include "emulator/server/debug_server.h"
+#include "emulator/debug/input/network_input_handler.h"
 #include "emulator/generated/hardware_config.h"
 
 namespace {
@@ -37,29 +37,29 @@ uint16_t FindAvailablePort(uint16_t start) {
 
 }
 
-TEST(server_debug_server_start_stop) {
+TEST(server_network_input_handler_start_stop) {
     uint16_t port = FindAvailablePort(13100);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    EXPECT_TRUE(!server.isRunning());
+    auto& handler = NetworkInputHandler::getInstance();
+    EXPECT_TRUE(!handler.isRunning());
     
-    bool started = server.start(port);
+    bool started = handler.start(port);
     ASSERT_TRUE(started);
-    EXPECT_TRUE(server.isRunning());
+    EXPECT_TRUE(handler.isRunning());
     
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     
-    server.stop();
-    EXPECT_TRUE(!server.isRunning());
+    handler.stop();
+    EXPECT_TRUE(!handler.isRunning());
 }
 
-TEST(server_debug_server_port_binding) {
+TEST(server_network_input_handler_port_binding) {
     uint16_t port = FindAvailablePort(13300);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     ASSERT_TRUE(fd >= 0);
@@ -74,22 +74,22 @@ TEST(server_debug_server_port_binding) {
     EXPECT_TRUE(connected);
     
     close(fd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(server_debug_server_restart) {
+TEST(server_network_input_handler_restart) {
     uint16_t port = FindAvailablePort(13600);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
+    auto& handler = NetworkInputHandler::getInstance();
     
-    ASSERT_TRUE(server.start(port));
-    EXPECT_TRUE(server.isRunning());
-    server.stop();
-    EXPECT_TRUE(!server.isRunning());
+    ASSERT_TRUE(handler.start(port));
+    EXPECT_TRUE(handler.isRunning());
+    handler.stop();
+    EXPECT_TRUE(!handler.isRunning());
     
-    ASSERT_TRUE(server.start(port));
-    EXPECT_TRUE(server.isRunning());
-    server.stop();
-    EXPECT_TRUE(!server.isRunning());
+    ASSERT_TRUE(handler.start(port));
+    EXPECT_TRUE(handler.isRunning());
+    handler.stop();
+    EXPECT_TRUE(!handler.isRunning());
 }

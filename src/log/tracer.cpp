@@ -1,4 +1,5 @@
 #include "emulator/log/tracer.h"
+#include "emulator/log/trace_manager.h"
 
 #include <cstdarg>
 #include <cstring>
@@ -20,7 +21,6 @@ void Tracer::init(const Config& config) {
     std::lock_guard<std::mutex> lock(mMutex);
     
     mName = config.name;
-    mEnabled = config.enabled;
     mHandler = config.handler;
     
     if (mFile != nullptr && mFile != stderr) {
@@ -28,18 +28,13 @@ void Tracer::init(const Config& config) {
         mFile = nullptr;
     }
     
-    mFilePath = config.filePath;
-    if (!mFilePath.empty()) {
-        mFile = std::fopen(mFilePath.c_str(), "a");
+    const std::string& filePath = TraceManager::getInstance().getTraceFile();
+    if (!filePath.empty()) {
+        mFile = std::fopen(filePath.c_str(), "a");
         if (mFile == nullptr) {
             mFile = stderr;
         }
     }
-}
-
-void Tracer::setEnabled(bool enabled) {
-    std::lock_guard<std::mutex> lock(mMutex);
-    mEnabled = enabled;
 }
 
 void Tracer::setHandler(std::function<void(const char*)> handler) {
@@ -47,17 +42,9 @@ void Tracer::setHandler(std::function<void(const char*)> handler) {
     mHandler = std::move(handler);
 }
 
-bool Tracer::isEnabled() const {
-    return mEnabled;
-}
-
 void Tracer::trace(const char* fmt, ...) {
-    if (!mEnabled) return;
-
     std::lock_guard<std::mutex> lock(mMutex);
     
-    if (!mEnabled) return;
-
     time_t now = std::time(nullptr);
     struct tm tmBuf;
     localtime_r(&now, &tmBuf);

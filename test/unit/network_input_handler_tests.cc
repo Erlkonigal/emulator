@@ -12,7 +12,7 @@
 #include <thread>
 
 #include "emulator/debug/debugger.h"
-#include "emulator/server/debug_server.h"
+#include "emulator/debug/input/network_input_handler.h"
 
 namespace {
 
@@ -93,12 +93,12 @@ std::string RecvWithTimeout(int fd, size_t maxLen, int timeoutMs) {
 
 }
 
-TEST(debug_server_client_connect) {
+TEST(network_input_handler_client_connect) {
     uint16_t port = FindAvailablePort(14000);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -106,18 +106,18 @@ TEST(debug_server_client_connect) {
     ASSERT_TRUE(clientFd >= 0);
     
     std::string welcome = RecvWithTimeout(clientFd, 1024, 1000);
-    EXPECT_TRUE(welcome.find("DebugServer connected") != std::string::npos);
+    EXPECT_TRUE(welcome.find("NetworkInputHandler connected") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_receives_welcome) {
+TEST(network_input_handler_receives_welcome) {
     uint16_t port = FindAvailablePort(14100);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -125,19 +125,19 @@ TEST(debug_server_receives_welcome) {
     ASSERT_TRUE(clientFd >= 0);
     
     std::string response = RecvWithTimeout(clientFd, 1024, 1000);
-    EXPECT_TRUE(response.find("DebugServer connected") != std::string::npos);
+    EXPECT_TRUE(response.find("NetworkInputHandler connected") != std::string::npos);
     EXPECT_TRUE(response.find("help") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_command_help) {
+TEST(network_input_handler_command_help) {
     uint16_t port = FindAvailablePort(14200);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -153,15 +153,15 @@ TEST(debug_server_command_help) {
                 response.find("run") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_command_quit) {
+TEST(network_input_handler_command_quit) {
     uint16_t port = FindAvailablePort(14300);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -176,15 +176,15 @@ TEST(debug_server_command_quit) {
     EXPECT_TRUE(response.find("Goodbye") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_command_exit) {
+TEST(network_input_handler_command_exit) {
     uint16_t port = FindAvailablePort(14400);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -199,15 +199,15 @@ TEST(debug_server_command_exit) {
     EXPECT_TRUE(response.find("Goodbye") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_prompt_after_command) {
+TEST(network_input_handler_prompt_after_command) {
     uint16_t port = FindAvailablePort(14500);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -222,15 +222,15 @@ TEST(debug_server_prompt_after_command) {
     EXPECT_TRUE(response.find("dbg>") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_multiple_commands) {
+TEST(network_input_handler_multiple_commands) {
     uint16_t port = FindAvailablePort(14600);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -252,16 +252,16 @@ TEST(debug_server_multiple_commands) {
     EXPECT_TRUE(!resp3.empty());
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_bp_commands) {
+TEST(network_input_handler_bp_commands) {
     uint16_t port = FindAvailablePort(14700);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
+    auto& handler = NetworkInputHandler::getInstance();
     Debugger::getInstance().reset();
-    ASSERT_TRUE(server.start(port));
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -284,15 +284,15 @@ TEST(debug_server_bp_commands) {
     EXPECT_TRUE(resp3.find("removed") != std::string::npos || !resp3.empty());
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_mem_command) {
+TEST(network_input_handler_mem_command) {
     uint16_t port = FindAvailablePort(14800);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -306,15 +306,15 @@ TEST(debug_server_mem_command) {
     EXPECT_TRUE(!response.empty());
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(debug_server_log_command) {
+TEST(network_input_handler_log_command) {
     uint16_t port = FindAvailablePort(14900);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -328,5 +328,5 @@ TEST(debug_server_log_command) {
     EXPECT_TRUE(!response.empty());
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }

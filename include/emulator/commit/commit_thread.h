@@ -1,45 +1,40 @@
 #pragma once
 
-#include <atomic>
-#include <condition_variable>
-#include <memory>
-#include <mutex>
-#include <thread>
-
 #include "emulator/commit/commit_queue.h"
+#include "emulator/commit/commit_thread_state.h"
 #include "emulator/cpu/cpu.h"
 #include "emulator/generated/hardware_config.h"
-#include "emulator/log/tracer.h"
+#include "emulator/thread/i_thread.h"
+#include "emulator/thread/state_machine.h"
 #include "emulator/utils/singleton.h"
 
-enum class CommitThreadState { Running, Step, Paused, Halted };
-
-class CommitThread : public Singleton<CommitThread> {
+class CommitThread : public IThread, public Singleton<CommitThread> {
 public:
-  Tracer iTrace;
+    void init();
+    void start() override;
+    void stop() override;
+    void reset() override;
 
-  void start();
-  void stop();
-  void reset();
+    void run();
+    void pause();
+    void step(uint32_t count);
 
-  void run();
-  void pause();
-  void step(uint32_t count);
-
-  CommitThreadState getState() const;
-  bool wasStarted() const { return mStarted.load(std::memory_order_acquire); }
+    CommitThreadState getState() const { return mStateMachine.getState(); }
 
 private:
-  void threadLoop();
+    void threadLoop() override;
 
-  // return number of commits successfully processed
-  size_t processCommits(const CommitInfo *commits, const size_t &numCommits,
-                        CommitThreadState &next);
-  std::thread mThread;
+    struct ProcessResult {
+        size_t processedCount;
+        CommitThreadState nextState;
+    };
 
-  std::atomic<CommitThreadState> mState{CommitThreadState::Halted};
-  std::atomic<size_t> mStepCount;
-  std::atomic<bool> mStarted{false};
+    ProcessResult processCommits(const CommitInfo *commits, size_t numCommits,
+                                 CommitThreadState currentState);
 
-  friend class Singleton<CommitThread>;
+    StateMachine<CommitThreadState> mStateMachine{CommitThreadState::Halted,
+                                                   getCommitThreadTransitions()};
+    std::atomic<size_t> mStepCount{0};
+
+    friend class Singleton<CommitThread>;
 };

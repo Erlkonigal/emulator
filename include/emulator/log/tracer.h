@@ -9,25 +9,20 @@ class Tracer {
 public:
     struct Config {
         std::string name;
-        bool enabled = false;
-        std::string filePath;
         std::function<void(const char*)> handler;
     };
 
     Tracer() = default;
-    ~Tracer();
+    virtual ~Tracer();
 
     void init(const Config& config);
-    void setEnabled(bool enabled);
     void setHandler(std::function<void(const char*)> handler);
-    bool isEnabled() const;
-    void trace(const char* fmt, ...);
+    const std::string& name() const { return mName; }
+    virtual void trace(const char* fmt, ...);
 
-private:
+protected:
     std::mutex mMutex;
     std::string mName;
-    bool mEnabled = false;
-    std::string mFilePath;
     FILE* mFile = nullptr;
     std::function<void(const char*)> mHandler;
 };

@@ -12,6 +12,7 @@
 #include "emulator/bus/bus.h"
 #include "emulator/bus/ram.h"
 #include "emulator/log/tracer.h"
+#include "emulator/log/trace_manager.h"
 #include "toy/toy_cpu_executor.h"
 #include "toy/toy_isa.h"
 
@@ -68,7 +69,7 @@ struct TraceTestContext {
   Tracer tracer;
 
   explicit TraceTestContext() {
-    tracer.init({.name = "TEST", .enabled = true, .filePath = ""});
+    tracer.init({.name = "TEST"});
 
     Bus::getInstance().clear();
 

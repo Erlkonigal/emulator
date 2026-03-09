@@ -39,14 +39,8 @@ bool applyConfigValue(RuntimeConfig *config, const std::string &key,
         config->debugPort = static_cast<uint16_t>(parsed);
         return true;
     }
-    if (key == "itrace") {
-        bool flag = false;
-        if (!parseBool(value, &flag)) {
-            if (error != nullptr)
-                *error = "Invalid itrace value: " + value;
-            return false;
-        }
-        config->iTrace = flag;
+    if (key == "trace_on") {
+        config->traceOn.push_back(value);
         return true;
     }
     if (key == "log_level") {
@@ -75,7 +69,7 @@ void RuntimeConfig::reset() {
     debug = false;
     debugPort = kDefaultDebugPort;
     ramSize = kRamSize;
-    iTrace = false;
+    traceOn.clear();
     traceFile.clear();
     logLevel = "info";
     logFile.clear();
@@ -132,7 +126,7 @@ void RuntimeConfig::printUsage(const char *exe) {
         "Options:\n"
         "  --config <file>       Load config file (default: emulator.conf)\n"
         "  --debug               Start in debugger mode (pause on start, debug server on port 1234)\n"
-        "  --itrace              Enable Instruction Trace\n"
+        "  --trace-on <name>     Enable trace by name (can be used multiple times)\n"
         "  --trace-file <file>   Output trace to file\n"
         "  --log-level <lvl>     Set log level (debug, info, warn, error)\n"
         "  --log-file <file>     Output log to file\n"
@@ -205,8 +199,12 @@ if (arg == "--debug") {
             }
             continue;
         }
-        if (arg == "--itrace") {
-            iTrace = true;
+        if (arg == "--trace-on") {
+            std::string value;
+            if (!requireArgValue(argc, argv, &i, "--trace-on", &value, error)) {
+                return false;
+            }
+            traceOn.push_back(value);
             continue;
         }
         if (arg == "--trace-file") {

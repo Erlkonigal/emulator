@@ -11,8 +11,9 @@
 #include "emulator/debug/breakpoint.h"
 #include "emulator/debug/debugger.h"
 #include "emulator/log/logger.h"
+#include "emulator/log/trace_manager.h"
 #include "emulator/runtime_config.h"
-#include "emulator/server/debug_server.h"
+#include "emulator/debug/input/network_input_handler.h"
 #include "emulator/generated/hardware_config.h"
 #include "emulator/utils/terminal.h"
 #include "emulator/utils/utils.h"
@@ -70,11 +71,12 @@ int RunEmulator(int argc, char **argv) {
   logConfig.filePath = config.logFile;
   Logger::getInstance().init(logConfig);
 
-  CommitThread::getInstance().iTrace.init({
-      .name = "ITRACE",
-      .enabled = config.iTrace,
-      .filePath = config.traceFile
-  });
+  TraceManager::getInstance().setTraceFile(config.traceFile);
+  CommitThread::getInstance().init();
+
+  for (const auto& traceName : config.traceOn) {
+      TraceManager::getInstance().setEnabled(traceName, true);
+  }
 
   if (config.romPath.empty()) {
     ERROR("ROM path is required");
@@ -125,7 +127,7 @@ int RunEmulator(int argc, char **argv) {
       [&]() { CommitThread::getInstance().run(); },
       [&](uint32_t count) { CommitThread::getInstance().step(count); },
       [&]() { CommitThread::getInstance().pause(); },
-      [&]() { DebugServer::getInstance().requestStop(); });
+      [&]() { NetworkInputHandler::getInstance().requestStop(); });
 
   Terminal::getInstance().setup();
 
@@ -135,19 +137,19 @@ int RunEmulator(int argc, char **argv) {
 
   if (config.debug) {
     INFO("Debug mode: starting debug server on port %u", config.debugPort);
-    DebugServer::getInstance().start(config.debugPort);
+    NetworkInputHandler::getInstance().start(config.debugPort);
 
-    while (DebugServer::getInstance().isRunning()) {
+    while (NetworkInputHandler::getInstance().isRunning()) {
       Terminal::getInstance().processIo();
       if (Terminal::getInstance().wasInterrupted()) {
         INFO("Interrupted, stopping...");
-        DebugServer::getInstance().stop();
+        NetworkInputHandler::getInstance().stop();
         break;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    DebugServer::getInstance().stop();
+    NetworkInputHandler::getInstance().stop();
   } else {
     INFO("Running emulator (Ctrl+C to exit)");
     CommitThread::getInstance().run();
@@ -167,5 +169,5 @@ int RunEmulator(int argc, char **argv) {
   Terminal::getInstance().processIo();
   Terminal::getInstance().restore();
 
-  return Debugger::getInstance().hadError() ? 1 : 0;
+  return Debugger::getInstance().hadError();
 }

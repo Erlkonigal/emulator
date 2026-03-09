@@ -14,7 +14,7 @@
 #include "emulator/bus/uart.h"
 #include "emulator/debug/breakpoint.h"
 #include "emulator/debug/debugger.h"
-#include "emulator/server/debug_server.h"
+#include "emulator/debug/input/network_input_handler.h"
 #include "helpers/stdout_capture.h"
 #include "helpers/test_helpers.h"
 #include "toy/rom_util.h"
@@ -183,12 +183,12 @@ std::string RecvWithTimeout(int fd, size_t maxLen, int timeoutMs) {
 
 }
 
-TEST(e2e_debug_server_help_command) {
+TEST(e2e_network_input_handler_help_command) {
     uint16_t port = FindAvailablePort(16200);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -204,17 +204,17 @@ TEST(e2e_debug_server_help_command) {
                 response.find("run") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(e2e_debug_server_regs_command) {
+TEST(e2e_network_input_handler_regs_command) {
     uint16_t port = FindAvailablePort(16300);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
+    auto& handler = NetworkInputHandler::getInstance();
     Debugger::getInstance().reset();
     
-    ASSERT_TRUE(server.start(port));
+    ASSERT_TRUE(handler.start(port));
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
     int clientFd = ConnectToServer(port);
@@ -230,20 +230,20 @@ TEST(e2e_debug_server_regs_command) {
                 response.find("dbg>") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(e2e_debug_server_bp_operations) {
+TEST(e2e_network_input_handler_bp_operations) {
     uint16_t port = FindAvailablePort(16400);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
+    auto& handler = NetworkInputHandler::getInstance();
     auto& dbg = Debugger::getInstance();
     auto& bpCtrl = BreakPointController::getInstance();
     dbg.reset();
     bpCtrl.reset();
     
-    ASSERT_TRUE(server.start(port));
+    ASSERT_TRUE(handler.start(port));
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
     int clientFd = ConnectToServer(port);
@@ -263,15 +263,15 @@ TEST(e2e_debug_server_bp_operations) {
     std::string resp3 = RecvWithTimeout(clientFd, 1024, 500);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(e2e_debug_server_mem_command) {
+TEST(e2e_network_input_handler_mem_command) {
     uint16_t port = FindAvailablePort(16500);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -288,15 +288,15 @@ TEST(e2e_debug_server_mem_command) {
                 response.find("dbg>") != std::string::npos);
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }
 
-TEST(e2e_debug_server_quit_disconnects) {
+TEST(e2e_network_input_handler_quit_disconnects) {
     uint16_t port = FindAvailablePort(17200);
     ASSERT_TRUE(port > 0);
     
-    auto& server = DebugServer::getInstance();
-    ASSERT_TRUE(server.start(port));
+    auto& handler = NetworkInputHandler::getInstance();
+    ASSERT_TRUE(handler.start(port));
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
@@ -313,5 +313,5 @@ TEST(e2e_debug_server_quit_disconnects) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
     close(clientFd);
-    server.stop();
+    handler.stop();
 }

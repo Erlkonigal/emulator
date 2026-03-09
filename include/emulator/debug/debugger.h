@@ -1,77 +1,40 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <functional>
-#include <sstream>
 #include <string>
-#include <vector>
 
+#include "emulator/debug/debug_context.h"
 #include "emulator/utils/singleton.h"
 
 class Debugger : public Singleton<Debugger> {
 public:
-  void run(bool interactive);
-  void reset();
-  bool hadError() const { return mHadError.load(); }
+    void reset();
+    bool hadError() const { return mHadError.load(); }
 
-  void processCommand(const std::string &command);
+    void processCommand(const std::string& command);
 
-void setControlCallbacks(std::function<void()> onRun,
-                            std::function<void(uint32_t)> onStep,
-                            std::function<void()> onPause,
-                            std::function<void()> onQuit = nullptr) {
-    mOnRun = std::move(onRun);
-    mOnStep = std::move(onStep);
-    mOnPause = std::move(onPause);
-    mOnQuit = std::move(onQuit);
-  }
+    void setControlCallbacks(std::function<void()> onRun,
+                              std::function<void(uint32_t)> onStep,
+                              std::function<void()> onPause,
+                              std::function<void()> onQuit = nullptr) {
+        mContext.setControlCallbacks(std::move(onRun), std::move(onStep),
+                                      std::move(onPause), std::move(onQuit));
+    }
 
-  bool wasQuitRequested() const { return mQuitRequested.load(); }
+    void setOutputHandler(std::function<void(const std::string&)> handler) {
+        mContext.setOutputHandler(std::move(handler));
+    }
 
-  void addBreakpoint(uint64_t address);
-  void removeBreakpoint(uint64_t address);
+    bool wasQuitRequested() const { return mContext.wasQuitRequested(); }
+    DebuggerState state() const { return mContext.state(); }
 
-private:
-  struct CommandEntry {
-    std::string name;
-    std::string help;
-    void (Debugger::*Handler)(std::istringstream &);
-  };
-
-  std::vector<CommandEntry> mCommands;
-  void registerCommands();
-
-  void runPlainInputLoop();
-
-  void cmdRun(std::istringstream &args);
-  void cmdStep(std::istringstream &args);
-  void cmdPause(std::istringstream &args);
-  void cmdQuit(std::istringstream &args);
-  void cmdRegs(std::istringstream &args);
-  void cmdMem(std::istringstream &args);
-  void cmdEval(std::istringstream &args);
-  void cmdBp(std::istringstream &args);
-  void cmdLog(std::istringstream &args);
-  void cmdTrace(std::istringstream &args);
-  void cmdHelp(std::istringstream &args);
-
-  std::function<void()> mOnRun;
-  std::function<void(uint32_t)> mOnStep;
-  std::function<void()> mOnPause;
-  std::function<void()> mOnQuit;
-
-  bool mIsInteractive = false;
-  uint64_t mTotalInstructions = 0;
-
-  std::chrono::steady_clock::time_point mLastCpsTime;
-  uint64_t mLastCpsCycles = 0;
-
-  std::atomic<bool> mHadError{false};
-  std::atomic<bool> mCpuRunning{false};
-  std::atomic<bool> mQuitRequested{false};
+    DebugContext& context() { return mContext; }
 
 private:
-  Debugger() { registerCommands(); }
-  friend class Singleton<Debugger>;
+    DebugContext mContext;
+    std::atomic<bool> mHadError{false};
+
+    Debugger();
+    friend class Singleton<Debugger>;
 };

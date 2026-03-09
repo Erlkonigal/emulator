@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "emulator/generated/hardware_config.h"
 #include "emulator/utils/singleton.h"
@@ -14,7 +15,7 @@ public:
     uint16_t debugPort = kDefaultDebugPort;
     uint64_t ramSize = kRamSize;
     
-    bool iTrace = false;
+    std::vector<std::string> traceOn;
     std::string traceFile;
     std::string logLevel = "info";
     std::string logFile;

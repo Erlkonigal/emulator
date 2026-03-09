@@ -8,7 +8,7 @@ add_executable(tests
     helpers/stdout_capture.cc
     helpers/test_helpers.cc
     unit/cli_tests.cc
-    unit/debug_server_tests.cc
+    unit/network_input_handler_tests.cc
     unit/debugger_tests.cc
     unit/integration_tests.cc
     unit/server_tests.cc
