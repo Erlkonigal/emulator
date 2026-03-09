@@ -1,12 +1,10 @@
 #include "emulator/debug/expression_parser.h"
 #include "emulator/commit/shadow_arch.h"
-#include "emulator/utils/config.h"
+#include "emulator/generated/hardware_config.h"
 
 #include <algorithm>
 #include <cctype>
 #include <string>
-
-ExpressionParser::ExpressionParser() : mExpr(""), mPos(0) {}
 
 uint64_t ExpressionParser::parse(const std::string &expr) {
   mExpr = expr;

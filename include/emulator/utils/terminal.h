@@ -1,0 +1,26 @@
+#pragma once
+
+#include <atomic>
+#include <cstddef>
+
+#include "emulator/utils/singleton.h"
+
+class Terminal : public Singleton<Terminal> {
+public:
+    void setup();
+    void restore();
+    void setInterruptFlag(std::atomic<bool>* flag);
+    void processIo();
+
+    bool wasInterrupted() const { return mInterrupted.load(); }
+    void clearInterrupt() { mInterrupted.store(false); }
+
+private:
+    void* mOriginalTermios = nullptr;
+    std::atomic<bool>* mInterruptFlag = nullptr;
+    std::atomic<bool> mInterrupted{false};
+    bool mConfigured = false;
+
+    Terminal() = default;
+    friend class Singleton<Terminal>;
+};

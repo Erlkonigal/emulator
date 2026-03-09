@@ -1,8 +1,9 @@
 #include "toy_cpu_executor.h"
 
+#include "emulator/bus/bus.h"
+
 #include <cstring>
 #include <iostream>
-#include <vector>
 
 #include "toy_isa.h"
 
@@ -30,7 +31,6 @@ ToyCpuExecutor *GetLastToyCpu() { return g_last; }
 
 ToyCpuExecutor::ToyCpuExecutor() {
   g_last = this;
-  mMemory.resize(kMemSize, 0);
   reset();
 }
 
@@ -85,38 +85,35 @@ void ToyCpuExecutor::setRegister(uint32_t regId, uint64_t value) {
 CpuErrorType ToyCpuExecutor::getLastError() const { return mLastFault; }
 
 void ToyCpuExecutor::writeMem(uint64_t addr, uint32_t data) {
-  if (addr + 4 > mMemory.size()) {
-    return;
-  }
-  mMemory[addr] = data & 0xff;
-  mMemory[addr + 1] = (data >> 8) & 0xff;
-  mMemory[addr + 2] = (data >> 16) & 0xff;
-  mMemory[addr + 3] = (data >> 24) & 0xff;
+  auto& bus = Bus::getInstance();
+  uint8_t bytes[4];
+  bytes[0] = data & 0xff;
+  bytes[1] = (data >> 8) & 0xff;
+  bytes[2] = (data >> 16) & 0xff;
+  bytes[3] = (data >> 24) & 0xff;
+  bus.write(addr, bytes, 4);
 }
 
 uint32_t ToyCpuExecutor::readMem(uint64_t addr) const {
-  if (addr + 4 > mMemory.size()) {
-    return 0;
-  }
-  return static_cast<uint32_t>(mMemory[addr]) |
-         (static_cast<uint32_t>(mMemory[addr + 1]) << 8) |
-         (static_cast<uint32_t>(mMemory[addr + 2]) << 16) |
-         (static_cast<uint32_t>(mMemory[addr + 3]) << 24);
+  auto& bus = Bus::getInstance();
+  uint8_t bytes[4] = {0, 0, 0, 0};
+  bus.read(addr, bytes, 4);
+  return static_cast<uint32_t>(bytes[0]) |
+         (static_cast<uint32_t>(bytes[1]) << 8) |
+         (static_cast<uint32_t>(bytes[2]) << 16) |
+         (static_cast<uint32_t>(bytes[3]) << 24);
 }
 
 void ToyCpuExecutor::cycle(CommitArray &commits) {
-  // We only produce 1 commit per cycle for toy cpu
   CommitInfo &commit = commits[0];
   commit.valid = false;
 
-  // Clear other commits
   for (size_t i = 1; i < kMaxNumCommitsPerCycle; ++i) {
     commits[i].valid = false;
   }
 
   uint64_t pcBefore = mPc;
   commit.pc = mPc;
-  // Initialize other fields
   commit.isRegWrite = false;
   commit.isMemWrite = false;
   commit.isCsrAccess = false;
@@ -126,26 +123,15 @@ void ToyCpuExecutor::cycle(CommitArray &commits) {
   commit.memAddress = 0;
   commit.memData = 0;
 
-  // Fetch instruction
-  if (mPc + 4 > mMemory.size()) {
-    commit.valid = true;
-    commit.errorType = CpuErrorType::Stop;
-    commit.errorMsg = "Fetch out of bounds";
-    mCycle++;
-    return;
-  }
-
   uint32_t inst = readMem(mPc);
   commit.inst = inst;
   mPc += 4;
   mCycle++;
 
   uint8_t op = OpCode(inst);
-  // Default valid
   commit.valid = true;
 
   if (op == static_cast<uint8_t>(toy::Op::Nop)) {
-    // Nothing
   } else if (op == static_cast<uint8_t>(toy::Op::Halt)) {
     commit.errorType = CpuErrorType::Halt;
     commit.errorMsg = "Halt instruction";
@@ -183,19 +169,13 @@ void ToyCpuExecutor::cycle(CommitArray &commits) {
     int8_t off = Off8(inst);
     uint64_t addr = getRegister(rs) + static_cast<int64_t>(off);
 
-    if (addr + 4 > mMemory.size()) {
-      commit.errorType = CpuErrorType::Stop;
-      commit.errorMsg = "Load out of bounds";
-      mLastFault = CpuErrorType::Stop;
-    } else {
-      uint32_t value = readMem(addr);
+    uint32_t value = readMem(addr);
 
-      commit.isRegWrite = true;
-      commit.regId = rd;
-      commit.regData = value;
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
 
-      setRegister(rd, value);
-    }
+    setRegister(rd, value);
   } else if (op == static_cast<uint8_t>(toy::Op::Sw)) {
     uint8_t rd = Rd(inst);
     uint8_t rs = Rs(inst);
@@ -207,13 +187,7 @@ void ToyCpuExecutor::cycle(CommitArray &commits) {
     commit.memAddress = addr;
     commit.memData = data;
 
-    if (addr + 4 > mMemory.size()) {
-      commit.errorType = CpuErrorType::Stop;
-      commit.errorMsg = "Store out of bounds";
-      mLastFault = CpuErrorType::Stop;
-    } else {
-      writeMem(addr, data);
-    }
+    writeMem(addr, data);
   } else if (op == static_cast<uint8_t>(toy::Op::Add)) {
     uint8_t rd = Rd(inst);
     uint8_t rs = Rs(inst);

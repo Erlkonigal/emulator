@@ -7,13 +7,11 @@
 
 class ExpressionParser : public Singleton<ExpressionParser> {
 public:
-  ExpressionParser();
-  ~ExpressionParser() = default;
   uint64_t parse(const std::string &expr);
 
 private:
-  std::string mExpr;
-  size_t mPos;
+  std::string mExpr = "";
+  size_t mPos = 0;
 
   enum class TokenType {
     End,

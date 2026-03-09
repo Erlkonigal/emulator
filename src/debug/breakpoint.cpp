@@ -18,3 +18,5 @@ void BreakPointController::remove(const uint64_t &addr) {
 bool BreakPointController::contains(const uint64_t &addr) const {
   return mBreakPoints.find(addr) != mBreakPoints.end();
 }
+
+void BreakPointController::reset() { mBreakPoints.clear(); }

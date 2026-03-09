@@ -3,12 +3,13 @@
 #include <cstdint>
 
 #include "emulator/cpu/cpu.h"
-#include "emulator/utils/config.h"
+#include "emulator/generated/hardware_config.h"
 #include "emulator/utils/singleton.h"
 
 class ShadowArch : public Singleton<ShadowArch> {
 public:
   void update(const CommitInfo &commit);
+  void reset();
 
   uint64_t readReg(uint32_t regId) const {
     if (regId < kMaxNumRegisters)

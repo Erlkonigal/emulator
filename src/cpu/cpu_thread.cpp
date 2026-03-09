@@ -2,20 +2,16 @@
 #include "emulator/commit/commit_queue.h"
 #include "emulator/cpu/cpu.h"
 #include "emulator/log/logger.h"
-#include "emulator/utils/config.h"
+#include "emulator/generated/hardware_config.h"
 #include "emulator/utils/utils.h"
 
 #include <algorithm>
-
-CpuThread::CpuThread() = default;
 
 void CpuThread::init(std::shared_ptr<ICpuExecutor> cpu) {
   mCpu = cpu;
   if (!mCpu)
     throw std::invalid_argument("ICpuExecutor cannot be null");
 }
-
-CpuThread::~CpuThread() { stop(); }
 
 void CpuThread::start() {
   mRunning.store(true, std::memory_order_release);
@@ -27,6 +23,11 @@ void CpuThread::stop() {
   if (mThread.joinable()) {
     mThread.join();
   }
+}
+
+void CpuThread::reset() {
+  stop();
+  mCpu.reset();
 }
 
 void CpuThread::threadLoop() {

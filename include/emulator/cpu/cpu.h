@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "emulator/utils/config.h"
+#include "emulator/generated/hardware_config.h"
 
 enum class CpuErrorType {
   None,
@@ -20,12 +20,14 @@ struct alignas(kPadding) CommitInfo {
   // fetch
   uint64_t pc;
   uint32_t inst;
+  char decode[kMaxInstDecodeLen];
   // register access
   bool isRegWrite;
   uint32_t regId;
   uint32_t regData;
   // mem access
   bool isMemWrite;
+  bool isMemUncached;
   uint64_t memAddress;
   uint32_t memData;
   // csr ctrl

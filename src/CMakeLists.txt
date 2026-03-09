@@ -2,6 +2,8 @@ file(GLOB_RECURSE SOURCES "*.cpp")
 
 add_library(emulator STATIC ${SOURCES})
 
+add_dependencies(emulator generate_config)
+
 target_include_directories(emulator PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}

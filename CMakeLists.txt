@@ -5,6 +5,20 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Generate hardware_config.h before building
+find_package(Python3 REQUIRED)
+add_custom_command(
+    OUTPUT "${CMAKE_SOURCE_DIR}/include/emulator/generated/hardware_config.h"
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/gen_config.py"
+    DEPENDS "${CMAKE_SOURCE_DIR}/config/hardware.conf"
+             "${CMAKE_SOURCE_DIR}/scripts/gen_config.py"
+    COMMENT "Generating hardware_config.h"
+    VERBATIM
+)
+add_custom_target(generate_config
+    DEPENDS "${CMAKE_SOURCE_DIR}/include/emulator/generated/hardware_config.h"
+)
+
 # Common compiler flags matching the original Makefile
 add_compile_options(-Wall -Wextra -Wpedantic -fPIC)
 if(NOT CMAKE_BUILD_TYPE)

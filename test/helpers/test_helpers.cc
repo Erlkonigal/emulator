@@ -6,15 +6,8 @@
 #include "emulator/cpu/cpu.h"
 #include "toy/toy_cpu_executor.h"
 
-std::shared_ptr<ICpuExecutor> createCpuExecutor(const std::vector<uint8_t>& romData) {
+std::shared_ptr<ICpuExecutor> createCpuExecutor() {
   auto cpu = std::make_shared<ToyCpuExecutor>();
-  for (size_t i = 0; i + 3 < romData.size(); i += 4) {
-    uint32_t word = static_cast<uint32_t>(romData[i]) |
-                    (static_cast<uint32_t>(romData[i + 1]) << 8) |
-                    (static_cast<uint32_t>(romData[i + 2]) << 16) |
-                    (static_cast<uint32_t>(romData[i + 3]) << 24);
-    cpu->writeMem(static_cast<uint64_t>(i), word);
-  }
   return cpu;
 }
 

@@ -3,20 +3,18 @@
 #include "emulator/cpu/cpu.h"
 #include "emulator/debug/breakpoint.h"
 #include "emulator/log/logger.h"
+#include "emulator/runtime_config.h"
 
 #include <iostream>
 #include <thread>
 #include <vector>
-
-CommitThread::CommitThread() {}
-
-CommitThread::~CommitThread() { stop(); }
 
 CommitThreadState CommitThread::getState() const {
   return mState.load(std::memory_order_acquire);
 }
 
 void CommitThread::start() {
+  mStarted.store(true, std::memory_order_release);
   mState.store(CommitThreadState::Paused, std::memory_order_release);
   mThread = std::thread(&CommitThread::threadLoop, this);
 }
@@ -26,6 +24,12 @@ void CommitThread::stop() {
   if (mThread.joinable()) {
     mThread.join();
   }
+}
+
+void CommitThread::reset() {
+  stop();
+  mStepCount.store(0, std::memory_order_release);
+  mStarted.store(false, std::memory_order_release);
 }
 
 void CommitThread::run() {
@@ -56,7 +60,7 @@ void CommitThread::threadLoop() {
       }
       size_t successCommits = processCommits(commits, numFrontCommits, state);
       CommitQueue::getInstance().pop(successCommits);
-      if (successCommits < numFrontCommits) {
+      if (state != CommitThreadState::Running) {
         mState.store(state, std::memory_order_release);
       }
       break;
@@ -73,7 +77,7 @@ void CommitThread::threadLoop() {
         }
         size_t successCommits = processCommits(commits, numFrontCommits, state);
         CommitQueue::getInstance().pop(successCommits);
-        if (successCommits < numFrontCommits) {
+        if (state != CommitThreadState::Step) {
           mStepCount.store(0, std::memory_order_release);
           mState.store(state, std::memory_order_release);
         } else {
@@ -95,11 +99,23 @@ void CommitThread::threadLoop() {
 }
 
 size_t CommitThread::processCommits(const CommitInfo *commits,
-                                    const size_t &numCommits,
-                                    CommitThreadState &next) {
-  size_t processed = 0;
-  for (size_t i = 0; i < numCommits; i++) {
-    const auto &commit = commits[i];
+                                     const size_t &numCommits,
+                                     CommitThreadState &next) {
+    size_t processed = 0;
+    for (size_t i = 0; i < numCommits; i++) {
+        const auto &commit = commits[i];
+
+        if (iTrace.isEnabled() && commit.valid) {
+            iTrace.trace("PC=0x%08lx INST=0x%08x %s",
+                 (unsigned long)commit.pc, commit.inst, commit.decode);
+            if (commit.isRegWrite) {
+                iTrace.trace("         REG x%u <- 0x%08x", commit.regId, commit.regData);
+            }
+            if (commit.isMemWrite) {
+                iTrace.trace("         MEM [0x%08lx] <- 0x%08x",
+                     (unsigned long)commit.memAddress, commit.memData);
+            }
+        }
 
     // handle breakpoint
     bool breakpointHit =

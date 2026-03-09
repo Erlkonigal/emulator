@@ -1,0 +1,103 @@
+menu "Memory Configuration"
+
+config ROM_BASE
+    hex "ROM base address"
+    default 0x00000000
+    help
+        Base address for ROM memory region.
+
+config RAM_BASE
+    hex "RAM base address"
+    default 0x80000000
+    help
+        Base address for RAM memory region.
+
+config RAM_SIZE
+    hex "RAM size"
+    default 0x10000000
+    help
+        Size of RAM memory region (default 256MB).
+
+endmenu
+
+menu "Peripheral Configuration"
+
+config UART_BASE
+    hex "UART base address"
+    default 0x10000000
+    help
+        Base address for UART peripheral.
+
+config UART_SIZE
+    hex "UART size"
+    default 0x1000
+    help
+        Size of UART address space.
+
+endmenu
+
+menu "Debug Configuration"
+
+config DEFAULT_DEBUG_PORT
+    int "Default debug server port"
+    default 1234
+    help
+        Default port for the debug server.
+
+endmenu
+
+menu "CPU Configuration"
+
+config CPU_FREQUENCY
+    int "CPU frequency (Hz)"
+    default 1000000
+    help
+        CPU operating frequency in Hz.
+
+config MAX_NUM_REGISTERS
+    int "Maximum number of registers"
+    default 32
+    help
+        Maximum number of CPU registers.
+
+config MAX_NUM_CSR
+    int "Maximum number of CSRs"
+    default 64
+    help
+        Maximum number of Control and Status Registers.
+
+config MAX_INST_DECODE_LEN
+    int "Maximum instruction decode string length"
+    default 64
+    help
+        Maximum length for instruction decode string.
+
+endmenu
+
+menu "Commit Queue Configuration"
+
+config COMMIT_QUEUE_SIZE
+    int "Commit queue size"
+    default 1024
+    help
+        Size of the commit queue.
+
+config MAX_NUM_COMMITS_PER_CYCLE
+    int "Maximum commits per cycle"
+    default 8
+    help
+        Maximum number of commits per CPU cycle.
+
+config MAX_NUM_COMMITS_PER_CONSUMPTION
+    int "Maximum commits per consumption"
+    default 256
+    help
+        Maximum number of commits processed per consumption.
+
+config PADDING
+    int "Alignment padding"
+    default 64
+    help
+        Padding for cache line alignment.
+
+endmenu

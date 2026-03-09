@@ -1,12 +1,13 @@
+#include "emulator/debug/breakpoint.h"
 #include "emulator/debug/debugger.h"
 #include "emulator/commit/commit_thread.h"
 #include "emulator/commit/shadow_arch.h"
 #include "emulator/debug/expression_parser.h"
 #include "emulator/log/logger.h"
-#include "emulator/utils/config.h"
+#include "emulator/log/tracer.h"
+#include "emulator/generated/hardware_config.h"
 #include "emulator/utils/utils.h"
 
-#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -15,9 +16,12 @@
 #include <sstream>
 #include <thread>
 
-Debugger::Debugger() { registerCommands(); }
-
-Debugger::~Debugger() = default;
+void Debugger::reset() {
+  BreakPointController::getInstance().reset();
+  mHadError.store(false, std::memory_order_release);
+  mCpuRunning.store(false, std::memory_order_release);
+  mQuitRequested.store(false, std::memory_order_release);
+}
 
 void Debugger::run(bool interactive) {
   mIsInteractive = interactive;
@@ -52,22 +56,16 @@ void Debugger::registerCommands() {
        &Debugger::cmdBp},
       {"log", "Set log level (log trace|debug|info|warn|error)",
        &Debugger::cmdLog},
+      {"trace", "Toggle tracer (trace on|off [itrace])",
+       &Debugger::cmdTrace},
       {"help", "Show this help message", &Debugger::cmdHelp}};
 }
 
-void Debugger::configureTrace(const EmulatorConfig *config) {
-  if (!config)
-    return;
-  mEnableITrace = config->iTrace;
-  mEnableMTrace = config->mTrace;
-  mEnableBpTrace = config->bpTrace;
-}
-
-bool Debugger::processCommand(const std::string &command) {
+void Debugger::processCommand(const std::string &command) {
   std::string trimmed = command;
   trimInPlace(&trimmed);
   if (trimmed.empty()) {
-    return true;
+    return;
   }
 
   std::istringstream stream(trimmed);
@@ -76,81 +74,84 @@ bool Debugger::processCommand(const std::string &command) {
 
   for (const auto &cmd : mCommands) {
     if (cmd.name == verb) {
-      return (this->*cmd.Handler)(stream);
+      (this->*cmd.Handler)(stream);
+      return;
     }
   }
-
-  return false;
+  
+  LINE("Unknown command: %s", verb.c_str());
 }
 
-bool Debugger::cmdRun(std::istringstream &args) {
+void Debugger::cmdRun(std::istringstream &args) {
   (void)args;
-  if (mHadError.load(std::memory_order_acquire)) {
-    INFO("CPU is halted. Cannot run.");
-    return false;
+  auto& commitThread = CommitThread::getInstance();
+  if (commitThread.wasStarted() && commitThread.getState() == CommitThreadState::Halted) {
+    LINE("CPU is halted. Cannot run.");
+    return;
   }
   if (mOnRun) {
     mOnRun();
     mCpuRunning.store(true, std::memory_order_release);
   }
-  return true;
 }
 
-bool Debugger::cmdStep(std::istringstream &args) {
-  if (mHadError.load(std::memory_order_acquire)) {
-    INFO("CPU is halted. Cannot step.");
-    return false;
+void Debugger::cmdStep(std::istringstream &args) {
+  auto& commitThread = CommitThread::getInstance();
+  if (commitThread.wasStarted() && commitThread.getState() == CommitThreadState::Halted) {
+    LINE("CPU is halted. Cannot step.");
+    return;
   }
   uint32_t count = 1;
   args >> count;
   if (mOnStep) {
     mOnStep(count);
   }
-  return true;
 }
 
-bool Debugger::cmdPause(std::istringstream &args) {
+void Debugger::cmdPause(std::istringstream &args) {
   (void)args;
-  if (mHadError.load(std::memory_order_acquire)) {
-    INFO("CPU is halted. Cannot pause.");
-    return false;
+  auto& commitThread = CommitThread::getInstance();
+  if (commitThread.wasStarted() && commitThread.getState() == CommitThreadState::Halted) {
+    LINE("CPU is halted. Cannot pause.");
+    return;
   }
   if (mOnPause) {
     mOnPause();
     mCpuRunning.store(false, std::memory_order_release);
   }
-  return true;
 }
 
-bool Debugger::cmdQuit(std::istringstream &args) {
+void Debugger::cmdQuit(std::istringstream &args) {
   (void)args;
-  return true;
+  mQuitRequested.store(true, std::memory_order_release);
+  if (mOnQuit) {
+    mOnQuit();
+  }
 }
 
-bool Debugger::cmdRegs(std::istringstream &args) {
+void Debugger::cmdRegs(std::istringstream &args) {
   (void)args;
   auto &shadowArch = ShadowArch::getInstance();
   for (uint32_t regId = 0; regId < kMaxNumRegisters; ++regId) {
     uint64_t val = shadowArch.readReg(regId);
-    INFO("r%u = 0x%llx", regId, (unsigned long long)val);
+    LINE("r%u = 0x%llx", regId, (unsigned long long)val);
   }
-  return true;
 }
 
-bool Debugger::cmdMem(std::istringstream &args) {
+void Debugger::cmdMem(std::istringstream &args) {
   std::string addrStr;
   std::string lenStr;
   args >> addrStr >> lenStr;
   if (addrStr.empty() || lenStr.empty()) {
-    INFO("Usage: mem <addr> <len>");
-    return false;
+    LINE("Usage: mem <addr> <len>");
+    return;
   }
 
   uint64_t addr = 0;
   uint64_t len = 0;
   if (!parseU64(addrStr, &addr) || !parseU64(lenStr, &len)) {
-    INFO("Invalid address or length");
-    return false;
+    LINE("Invalid address or length");
+    return;
   }
 
   auto &shadowArch = ShadowArch::getInstance();
@@ -158,7 +159,7 @@ bool Debugger::cmdMem(std::istringstream &args) {
   for (uint64_t i = 0; i < len; ++i) {
     if (i % 16 == 0) {
       if (!line.empty()) {
-        INFO("%s", line.c_str());
+        LINE("%s", line.c_str());
       }
       char header[32];
       snprintf(header, sizeof(header), "%08llx: ",
@@ -172,107 +173,124 @@ bool Debugger::cmdMem(std::istringstream &args) {
     line += byteStr;
   }
   if (!line.empty()) {
-    INFO("%s", line.c_str());
+    LINE("%s", line.c_str());
   }
-  return true;
 }
 
-bool Debugger::cmdEval(std::istringstream &args) {
+void Debugger::cmdEval(std::istringstream &args) {
   std::string expr;
   std::getline(args, expr);
   trimInPlace(&expr);
   if (expr.empty()) {
-    return false;
+    return;
   }
-  // Simple expression evaluation - just parse hex/decimal numbers for now
   uint64_t value = 0;
   if (!parseU64(expr, &value)) {
-    INFO("Invalid expression");
-    return false;
+    LINE("Invalid expression");
+    return;
   }
-  INFO("0x%llx (%llu)", (unsigned long long)value, (unsigned long long)value);
-  return true;
+  LINE("0x%llx (%llu)", (unsigned long long)value, (unsigned long long)value);
 }
 
-bool Debugger::cmdBp(std::istringstream &args) {
+void Debugger::cmdBp(std::istringstream &args) {
   std::string action;
   args >> action;
 
   if (action == "list" || action.empty()) {
-    std::lock_guard<std::mutex> lock(mMutex);
-    if (mBreakpoints.empty()) {
-      INFO("No breakpoints.");
+    std::vector<std::string> lines;
+    BreakPointController::getInstance().list(lines);
+    if (lines.empty()) {
+      LINE("No breakpoints.");
     } else {
-      INFO("Breakpoints:");
-      for (uint64_t bp : mBreakpoints) {
-        INFO("  0x%llx", (unsigned long long)bp);
+      LINE("Breakpoints:");
+      for (const auto &line : lines) {
+        LINE("  %s", line.c_str());
       }
     }
-    return true;
+    return;
   }
 
   std::string addrStr;
   args >> addrStr;
   uint64_t addr = 0;
   if (!parseU64(addrStr, &addr)) {
-    INFO("Invalid address");
-    return false;
+    LINE("Invalid address");
+    return;
   }
 
   if (action == "add") {
     addBreakpoint(addr);
-    INFO("Breakpoint added at 0x%llx", (unsigned long long)addr);
-    return true;
+    LINE("Breakpoint added at 0x%llx", (unsigned long long)addr);
+    return;
   }
   if (action == "del") {
     removeBreakpoint(addr);
-    INFO("Breakpoint removed at 0x%llx", (unsigned long long)addr);
-    return true;
+    LINE("Breakpoint removed at 0x%llx", (unsigned long long)addr);
+    return;
   }
 
-  INFO("Usage: bp list|add <addr>|del <addr>");
-  return false;
+  LINE("Usage: bp list|add <addr>|del <addr>");
 }
 
-bool Debugger::cmdLog(std::istringstream &args) {
+void Debugger::cmdLog(std::istringstream &args) {
   std::string levelStr;
   args >> levelStr;
   std::string trimmed = toLower(levelStr);
   trimInPlace(&trimmed);
 
-  logging::Level level = logging::Level::Info;
+  Logger::Level level = Logger::Level::Info;
   bool valid = false;
 
-  if (trimmed == "trace") {
-    level = logging::Level::Trace;
-    valid = true;
-  } else if (trimmed == "debug") {
-    level = logging::Level::Debug;
+  if (trimmed == "debug") {
+    level = Logger::Level::Debug;
     valid = true;
   } else if (trimmed == "info") {
-    level = logging::Level::Info;
+    level = Logger::Level::Info;
     valid = true;
   } else if (trimmed == "warn") {
-    level = logging::Level::Warn;
+    level = Logger::Level::Warn;
     valid = true;
   } else if (trimmed == "error") {
-    level = logging::Level::Error;
+    level = Logger::Level::Error;
     valid = true;
   }
 
   if (valid) {
-    logging::level(level);
-    INFO("Log level set to %s", levelStr.c_str());
-    return true;
+    Logger::getInstance().setLevel(level);
+    LINE("Log level set to %s", levelStr.c_str());
+    return;
   }
 
-  INFO("Usage: log [trace|debug|info|warn|error]");
-  return true;
+  LINE("Usage: log [trace|debug|info|warn|error]");
 }
 
-bool Debugger::cmdHelp(std::istringstream &args) {
+void Debugger::cmdTrace(std::istringstream &args) {
+  std::string action;
+  args >> action;
+  
+  if (action != "on" && action != "off") {
+    LINE("Usage: trace on|off [itrace]");
+    return;
+  }
+  
+  std::string traceName;
+  args >> traceName;
+  if (traceName.empty()) {
+    traceName = "itrace";
+  }
+  
+  if (traceName == "itrace") {
+    CommitThread::getInstance().iTrace.setEnabled(action == "on");
+    LINE("ITRACE %s", action == "on" ? "enabled" : "disabled");
+    return;
+  }
+  
+  LINE("Unknown tracer: %s", traceName.c_str());
+}
+
+void Debugger::cmdHelp(std::istringstream &args) {
   (void)args;
-  INFO("Available commands:");
+  LINE("Available commands:");
 
   size_t maxNameLen = 0;
   for (const auto &cmd : mCommands) {
@@ -283,24 +301,16 @@ bool Debugger::cmdHelp(std::istringstream &args) {
 
   for (const auto &cmd : mCommands) {
     std::string padding(maxNameLen - cmd.name.length() + 2, ' ');
-    INFO("  %s%s%s", cmd.name.c_str(), padding.c_str(), cmd.help.c_str());
+    LINE("  %s%s%s", cmd.name.c_str(), padding.c_str(), cmd.help.c_str());
   }
-  return true;
 }
 
 void Debugger::addBreakpoint(uint64_t address) {
-  std::lock_guard<std::mutex> lock(mMutex);
-  if (std::find(mBreakpoints.begin(), mBreakpoints.end(), address) ==
-      mBreakpoints.end()) {
-    mBreakpoints.push_back(address);
-  }
+  BreakPointController::getInstance().add(address);
 }
 
 void Debugger::removeBreakpoint(uint64_t address) {
-  std::lock_guard<std::mutex> lock(mMutex);
-  mBreakpoints.erase(
-      std::remove(mBreakpoints.begin(), mBreakpoints.end(), address),
-      mBreakpoints.end());
+  BreakPointController::getInstance().remove(address);
 }
 
 void Debugger::runPlainInputLoop() {
@@ -310,7 +320,7 @@ void Debugger::runPlainInputLoop() {
     if (line == "quit" || line == "exit") {
       break;
     }
-    mLastCommandSuccess = processCommand(line);
+    processCommand(line);
     std::cout << "dbg> " << std::flush;
   }
 }

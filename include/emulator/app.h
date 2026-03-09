@@ -2,10 +2,10 @@
 
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 class ICpuExecutor;
 
-std::shared_ptr<ICpuExecutor> createCpuExecutor(const std::vector<uint8_t>& romData);
+std::shared_ptr<ICpuExecutor> createCpuExecutor();
 
-int RunEmulator(int argc, char** argv);
+void EmulatorReset();
+int RunEmulator(int argc, char **argv);

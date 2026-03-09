@@ -13,6 +13,7 @@ public:
   void add(const uint64_t &addr);
   void remove(const uint64_t &addr);
   bool contains(const uint64_t &addr) const;
+  void reset();
 
 private:
   std::set<uint64_t> mBreakPoints;

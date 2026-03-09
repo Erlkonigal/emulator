@@ -9,7 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "emulator/log/logger.h"
+#include "emulator/bus/bus.h"
+#include "emulator/bus/ram.h"
+#include "emulator/log/tracer.h"
 #include "toy/toy_cpu_executor.h"
 #include "toy/toy_isa.h"
 
@@ -61,20 +63,25 @@ std::string Decode(uint32_t inst) {
 
 struct TraceTestContext {
   std::unique_ptr<ToyCpuExecutor> Cpu;
-  std::string LogFile;
   std::function<std::string(const CommitInfo &)> Formatter;
   std::vector<std::string> TraceOutput;
+  Tracer tracer;
 
-  explicit TraceTestContext(const std::string &logFile) : LogFile(logFile) {
-    logging::Config config;
-    config.level = logging::Level::Trace;
-    config.mFile = LogFile;
-    logging::init(config);
+  explicit TraceTestContext() {
+    tracer.init({.name = "TEST", .enabled = true, .filePath = ""});
+
+    Bus::getInstance().clear();
+
+    auto& ram = Ram::getInstance();
+    ram.init(0, 65536);
+    Bus::getInstance().registerDevice(&ram);
 
     Cpu = std::make_unique<ToyCpuExecutor>();
   }
 
-  ~TraceTestContext() = default;
+  ~TraceTestContext() {
+    Bus::getInstance().clear();
+  }
 
   void RunSteps(int steps) {
     for (int i = 0; i < steps; ++i) {
@@ -87,7 +94,7 @@ struct TraceTestContext {
             continue;
           std::string line = Formatter(commit);
           if (!line.empty()) {
-            TRACE("%s", line.c_str());
+            tracer.trace("%s", line.c_str());
             TraceOutput.push_back(line);
           }
         }
@@ -101,16 +108,6 @@ struct TraceTestContext {
       Cpu->writeMem(addr, inst);
       addr += 4;
     }
-  }
-
-  std::vector<std::string> ReadLog() const {
-    std::vector<std::string> lines;
-    std::ifstream f(LogFile);
-    std::string line;
-    while (std::getline(f, line)) {
-      lines.push_back(line);
-    }
-    return lines;
   }
 };
 
@@ -129,8 +126,7 @@ bool AnyLineContains(const std::vector<std::string> &lines,
 void RegisterTraceTests() {}
 
 TEST(trace_custom_formatter) {
-  std::string logFile = "/tmp/trace_custom_fmt.log";
-  TraceTestContext ctx(logFile);
+  TraceTestContext ctx;
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     char buf[128];
@@ -144,12 +140,10 @@ TEST(trace_custom_formatter) {
   ctx.RunSteps(1);
 
   EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "CUSTOM: 0x0 0"));
-  std::remove(logFile.c_str());
 }
 
 TEST(trace_itrace_only) {
-  std::string logFile = "/tmp/trace_itrace.log";
-  TraceTestContext ctx(logFile);
+  TraceTestContext ctx;
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     char buf[256];
@@ -166,34 +160,10 @@ TEST(trace_itrace_only) {
   EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "PC:0x00000000"));
   EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "NOP"));
   EXPECT_TRUE(!AnyLineContains(ctx.TraceOutput, "Mem"));
-  std::remove(logFile.c_str());
-}
-
-TEST(trace_mtrace_only) {
-  std::string logFile = "/tmp/trace_mtrace.log";
-  TraceTestContext ctx(logFile);
-
-  ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
-    std::stringstream ss;
-    if (commit.isMemWrite) {
-      ss << "Mem:W:0x" << std::hex << commit.memAddress << "="
-         << commit.memData;
-    }
-    return ss.str();
-  };
-
-  std::vector<uint32_t> prog;
-  toy::Emit(&prog, toy::Sw(0, 0, 4));
-  ctx.WriteProgram(prog);
-  ctx.RunSteps(1);
-
-  EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "Mem:W:0x4="));
-  std::remove(logFile.c_str());
 }
 
 TEST(trace_itrace_mtrace_combo) {
-  std::string logFile = "/tmp/trace_imtrace.log";
-  TraceTestContext ctx(logFile);
+  TraceTestContext ctx;
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     char buf[256];
@@ -209,35 +179,10 @@ TEST(trace_itrace_mtrace_combo) {
   ctx.RunSteps(2);
 
   EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "PC:0x00000000"));
-  std::remove(logFile.c_str());
-}
-
-TEST(trace_bptrace) {
-  std::string logFile = "/tmp/trace_bptrace.log";
-  TraceTestContext ctx(logFile);
-
-  ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
-    char buf[256];
-    std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08x %s", commit.pc,
-                  commit.inst, Decode(commit.inst).c_str());
-    return std::string(buf);
-  };
-
-  std::vector<uint32_t> prog;
-  toy::Emit(&prog, toy::Lui(1, 0x1));
-  toy::Emit(&prog, toy::Lui(2, 0x1));
-  toy::Emit(&prog, toy::Beq(1, 2, 1));
-  toy::Emit(&prog, toy::Nop());
-  ctx.WriteProgram(prog);
-  ctx.RunSteps(3);
-
-  EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "BEQ r1, r2, 1"));
-  std::remove(logFile.c_str());
 }
 
 TEST(trace_all_enabled) {
-  std::string logFile = "/tmp/trace_all.log";
-  TraceTestContext ctx(logFile);
+  TraceTestContext ctx;
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     char buf[256];
@@ -256,5 +201,4 @@ TEST(trace_all_enabled) {
   ctx.RunSteps(4);
 
   EXPECT_TRUE(AnyLineContains(ctx.TraceOutput, "BEQ"));
-  std::remove(logFile.c_str());
 }

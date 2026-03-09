@@ -2,7 +2,6 @@
 #define TEST_TOY_CPU_EXECUTOR_H
 
 #include <cstdint>
-#include <vector>
 
 #include "emulator/cpu/cpu.h"
 
@@ -24,7 +23,6 @@ public:
   size_t getCsrCount() const override;
   void setResetPc(uint64_t pc) override;
 
-  // Helper methods for tests (not overrides)
   uint64_t getPc() const;
   void setPc(uint64_t pc);
   uint64_t getCycle() const;
@@ -32,21 +30,18 @@ public:
   void setRegister(uint32_t regId, uint64_t value);
   CpuErrorType getLastError() const;
 
-  // Memory access for tests
   void writeMem(uint64_t addr, uint32_t data);
   uint32_t readMem(uint64_t addr) const;
 
 private:
   static constexpr uint32_t kRegCount = 16;
   static constexpr uint32_t kCsrCount = 64;
-  static constexpr uint64_t kMemSize = 1024 * 1024; // 1MB for tests
 
   uint64_t mRegs[kRegCount] = {};
   uint64_t mCsrs[kCsrCount] = {};
   uint64_t mPc = 0;
   uint64_t mCycle = 0;
   uint64_t mResetPc = 0;
-  std::vector<uint8_t> mMemory;
 
   CpuErrorType mLastFault = CpuErrorType::None;
 };

@@ -1,6 +1,19 @@
 #include "emulator/commit/shadow_arch.h"
 #include "emulator/log/logger.h"
 
+void ShadowArch::reset() {
+  pc = 0;
+  for (size_t i = 0; i < kMaxNumRegisters; ++i) {
+    regs[i] = 0;
+  }
+  for (size_t i = 0; i < kMaxNumCsr; ++i) {
+    csrs[i] = 0;
+  }
+  for (size_t i = 0; i < kRamSize; ++i) {
+    mem[i] = 0;
+  }
+}
+
 void ShadowArch::update(const CommitInfo &commit) {
   if (!commit.valid) {
     WARN("Invalid commit, maybe triggered by assert");

@@ -93,7 +93,17 @@ static std::vector<std::string> Tokenize(const std::string& line) {
                 current.clear();
             }
             tokens.push_back("]");
-        } else if ((c == ',' || c == ' ' || c == '\t') && !inBracket) {
+        } else if (c == ',' && !inBracket) {
+            if (!current.empty()) {
+                tokens.push_back(Trim(current));
+                current.clear();
+            }
+        } else if ((c == ' ' || c == '\t') && !inBracket) {
+            if (!current.empty()) {
+                tokens.push_back(Trim(current));
+                current.clear();
+            }
+        } else if (c == ',' && inBracket) {
             if (!current.empty()) {
                 tokens.push_back(Trim(current));
                 current.clear();

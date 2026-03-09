@@ -9,12 +9,10 @@
 
 class CpuThread : public Singleton<CpuThread> {
 public:
-  CpuThread();
-  ~CpuThread();
-
   void init(std::shared_ptr<ICpuExecutor> cpu);
   void start();
   void stop();
+  void reset();
 
 private:
   void threadLoop();

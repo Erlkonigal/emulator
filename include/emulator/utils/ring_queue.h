@@ -13,7 +13,7 @@
 #include <type_traits>
 #include <unistd.h>
 
-#include "emulator/utils/config.h"
+#include "emulator/generated/hardware_config.h"
 
 /**
  * @brief High-performance SPSC Ring Queue using Linux Virtual Memory Magic.
@@ -170,6 +170,13 @@ public:
   }
 
   [[nodiscard]] size_t capacity() const { return mCapacity; }
+
+  void reset() {
+    mHead.store(0, std::memory_order_release);
+    mTail.store(0, std::memory_order_release);
+    mCachedHead = 0;
+    mCachedTail = 0;
+  }
 
 private:
   void cleanup() {
