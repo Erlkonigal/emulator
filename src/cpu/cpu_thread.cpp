@@ -12,6 +12,7 @@ void CpuThread::init(std::shared_ptr<ICpuExecutor> cpu) {
     if (!mCpu) {
         throw std::invalid_argument("ICpuExecutor cannot be null");
     }
+    mCpu->reset();
 }
 
 void CpuThread::start() {
