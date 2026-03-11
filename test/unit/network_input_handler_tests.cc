@@ -16,6 +16,28 @@
 
 namespace {
 
+bool WaitForServerReady(uint16_t port, int maxAttempts = 50, int delayMs = 2) {
+    for (int i = 0; i < maxAttempts; ++i) {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            continue;
+        }
+        struct sockaddr_in addr;
+        std::memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = htons(port);
+        if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+            close(fd);
+            return true;
+        }
+        close(fd);
+        std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+    }
+    return false;
+}
+
 uint16_t FindAvailablePort(uint16_t start) {
     for (uint16_t port = start; port < start + 100; ++port) {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -77,7 +99,7 @@ std::string RecvWithTimeout(int fd, size_t maxLen, int timeoutMs) {
         
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = 100000;
+        tv.tv_usec = 1000;
         
         int ret = select(fd + 1, &readfds, nullptr, nullptr, &tv);
         if (ret <= 0) continue;
@@ -100,12 +122,12 @@ TEST(network_input_handler_client_connect) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    std::string welcome = RecvWithTimeout(clientFd, 1024, 1000);
+    std::string welcome = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(welcome.find("NetworkInputHandler connected") != std::string::npos);
     
     close(clientFd);
@@ -119,12 +141,12 @@ TEST(network_input_handler_receives_welcome) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    std::string response = RecvWithTimeout(clientFd, 1024, 1000);
+    std::string response = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(response.find("NetworkInputHandler connected") != std::string::npos);
     EXPECT_TRUE(response.find("help") != std::string::npos);
     
@@ -139,16 +161,16 @@ TEST(network_input_handler_command_help) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "help"));
     
-    std::string response = RecvWithTimeout(clientFd, 2048, 1000);
+    std::string response = RecvWithTimeout(clientFd, 2048, 100);
     EXPECT_TRUE(response.find("Available commands") != std::string::npos ||
                 response.find("run") != std::string::npos);
     
@@ -163,16 +185,16 @@ TEST(network_input_handler_command_quit) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "quit"));
     
-    std::string response = RecvWithTimeout(clientFd, 1024, 500);
+    std::string response = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(response.find("Goodbye") != std::string::npos);
     
     close(clientFd);
@@ -186,16 +208,16 @@ TEST(network_input_handler_command_exit) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "exit"));
     
-    std::string response = RecvWithTimeout(clientFd, 1024, 500);
+    std::string response = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(response.find("Goodbye") != std::string::npos);
     
     close(clientFd);
@@ -209,16 +231,16 @@ TEST(network_input_handler_prompt_after_command) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "regs"));
     
-    std::string response = RecvWithTimeout(clientFd, 4096, 1000);
+    std::string response = RecvWithTimeout(clientFd, 4096, 200);
     EXPECT_TRUE(response.find("dbg>") != std::string::npos);
     
     close(clientFd);
@@ -232,23 +254,23 @@ TEST(network_input_handler_multiple_commands) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "help"));
-    std::string resp1 = RecvWithTimeout(clientFd, 2048, 500);
+    std::string resp1 = RecvWithTimeout(clientFd, 2048, 100);
     EXPECT_TRUE(!resp1.empty());
     
     EXPECT_TRUE(SendLine(clientFd, "regs"));
-    std::string resp2 = RecvWithTimeout(clientFd, 4096, 500);
+    std::string resp2 = RecvWithTimeout(clientFd, 4096, 100);
     EXPECT_TRUE(!resp2.empty());
     
     EXPECT_TRUE(SendLine(clientFd, "bp list"));
-    std::string resp3 = RecvWithTimeout(clientFd, 1024, 500);
+    std::string resp3 = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(!resp3.empty());
     
     close(clientFd);
@@ -263,24 +285,24 @@ TEST(network_input_handler_bp_commands) {
     Debugger::getInstance().reset();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "bp add 0x80000000"));
-    std::string resp1 = RecvWithTimeout(clientFd, 1024, 500);
+    std::string resp1 = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(resp1.find("added") != std::string::npos || !resp1.empty());
     
     EXPECT_TRUE(SendLine(clientFd, "bp list"));
-    std::string resp2 = RecvWithTimeout(clientFd, 1024, 500);
+    std::string resp2 = RecvWithTimeout(clientFd, 1024, 200);
     EXPECT_TRUE(resp2.find("80000000") != std::string::npos || 
                 resp2.find("Breakpoints") != std::string::npos);
     
     EXPECT_TRUE(SendLine(clientFd, "bp del 0x80000000"));
-    std::string resp3 = RecvWithTimeout(clientFd, 1024, 500);
+    std::string resp3 = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(resp3.find("removed") != std::string::npos || !resp3.empty());
     
     close(clientFd);
@@ -294,15 +316,15 @@ TEST(network_input_handler_mem_command) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "mem 0x80000000 16"));
-    std::string response = RecvWithTimeout(clientFd, 1024, 500);
+    std::string response = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(!response.empty());
     
     close(clientFd);
@@ -316,15 +338,15 @@ TEST(network_input_handler_log_command) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     EXPECT_TRUE(SendLine(clientFd, "log debug"));
-    std::string response = RecvWithTimeout(clientFd, 1024, 500);
+    std::string response = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(!response.empty());
     
     close(clientFd);

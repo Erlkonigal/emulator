@@ -230,7 +230,7 @@ TEST(debugger_cmd_pause) {
     dbg.setControlCallbacks(
         nullptr,
         nullptr,
-        []() { gPauseCalled = true; }
+        []() { gPauseCalled = true; return true; }
     );
     
     dbg.processCommand("pause");
@@ -244,7 +244,7 @@ TEST(debugger_cmd_step_default) {
     
     dbg.setControlCallbacks(
         nullptr,
-        [](uint32_t count) { gStepCount = count; },
+        [](uint32_t count) { gStepCount = count; return true; },
         nullptr
     );
     
@@ -259,7 +259,7 @@ TEST(debugger_cmd_step_with_count) {
     
     dbg.setControlCallbacks(
         nullptr,
-        [](uint32_t count) { gStepCount = count; },
+        [](uint32_t count) { gStepCount = count; return true; },
         nullptr
     );
     
@@ -274,7 +274,7 @@ TEST(debugger_cmd_step_large_count) {
     
     dbg.setControlCallbacks(
         nullptr,
-        [](uint32_t count) { gStepCount = count; },
+        [](uint32_t count) { gStepCount = count; return true; },
         nullptr
     );
     
@@ -288,7 +288,7 @@ TEST(debugger_cmd_run_with_callback) {
     ResetTestFlags();
     
     dbg.setControlCallbacks(
-        []() { gRunCalled = true; },
+        []() { gRunCalled = true; return true; },
         nullptr,
         nullptr
     );

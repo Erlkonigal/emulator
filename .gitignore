@@ -7,4 +7,10 @@ build
 # Compiled object files
 *.o
 *.a
+*.config
+*.config.old
+
+*__pycache__*
+
+gmon.out
 compile_commands.json

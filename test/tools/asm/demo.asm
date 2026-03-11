@@ -19,7 +19,7 @@
     
     # Wait for UART TX ready (status bit 0 = 1)
 wait_tx:
-    LW r5, [r4, 4]
+    LBU r5, [r4, 4]
     ANDI r5, 0x0001
     BEQ r5, r0, wait_tx
     

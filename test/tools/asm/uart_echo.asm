@@ -5,23 +5,20 @@
 #
 # Status values:
 #   0: TX full,  no RX
-#   1: TX ready, no RX  <- wait
+#   1: TX ready, no RX
 #   2: TX full,  has RX
-#   3: TX ready, has RX
+#   3: TX ready, has RX  <- safe to echo
 
-    LUI r1, 0x1000
+    LUI r1, 0x1000      # r1 = UART base (0x10000000)
     LUI r4, 0x0000
-    ORI r4, 0x0001
+    ORI r4, 0x0003      # r4 = 3 (TX ready AND RX ready)
 
 loop:
-    LW r2, [r1, 4]
-    BEQ r2, r0, wait
-    BEQ r2, r4, wait
-    
-    LW r3, [r1, 0]
-    SW r3, [r1, 0]
-    SW r3, [r1, 0]
-    BEQ r0, r0, loop
+    LBU r2, [r1, 4]     # r2 = status (byte read)
+    BEQ r2, r4, echo    # if status == 3, proceed to echo
+    BEQ r0, r0, loop    # else, keep polling
 
-wait:
-    BEQ r0, r0, loop
+echo:
+    LBU r3, [r1, 0]     # read RX byte
+    SB r3, [r1, 0]      # write to TX (echo)
+    BEQ r0, r0, loop    # continue polling

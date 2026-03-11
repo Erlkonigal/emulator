@@ -15,6 +15,16 @@ enum class Op : uint8_t {
     Beq = 0x05,
     Add = 0x06,
     Sub = 0x07,
+    Andi = 0x08,
+    Lb = 0x09,
+    Lh = 0x0a,
+    Lbu = 0x0b,
+    Lhu = 0x0c,
+    Sb = 0x0d,
+    Sh = 0x0e,
+    Srli = 0x0f,
+    Slli = 0x10,
+    And = 0x11,
     Halt = 0x7f,
 };
 
@@ -166,6 +176,15 @@ static bool ParseLine(const std::string& line, Instruction* inst, std::string* l
         inst->op = Op::Ori;
         return true;
     }
+    if (opName == "ANDI") {
+        if (tokens.size() < 3) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        std::string immStr = tokens[2];
+        if (!immStr.empty() && immStr[0] == '#') immStr = immStr.substr(1);
+        if (!ParseImm16(immStr, &inst->imm)) return false;
+        inst->op = Op::Andi;
+        return true;
+    }
     if (opName == "LW") {
         if (tokens.size() < 5) return false;
         if (!ParseRegister(tokens[1], &inst->rd)) return false;
@@ -192,6 +211,90 @@ static bool ParseLine(const std::string& line, Instruction* inst, std::string* l
             inst->imm = 0;
         }
         inst->op = Op::Sw;
+        return true;
+    }
+    if (opName == "LB") {
+        if (tokens.size() < 5) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (tokens[2] != "[") return false;
+        if (!ParseRegister(tokens[3], &inst->rs)) return false;
+        if (tokens[4] != "]") {
+            if (!ParseOffset(tokens[4], reinterpret_cast<int8_t*>(&inst->imm))) return false;
+            if (tokens.size() < 6 || tokens[5] != "]") return false;
+        } else {
+            inst->imm = 0;
+        }
+        inst->op = Op::Lb;
+        return true;
+    }
+    if (opName == "LH") {
+        if (tokens.size() < 5) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (tokens[2] != "[") return false;
+        if (!ParseRegister(tokens[3], &inst->rs)) return false;
+        if (tokens[4] != "]") {
+            if (!ParseOffset(tokens[4], reinterpret_cast<int8_t*>(&inst->imm))) return false;
+            if (tokens.size() < 6 || tokens[5] != "]") return false;
+        } else {
+            inst->imm = 0;
+        }
+        inst->op = Op::Lh;
+        return true;
+    }
+    if (opName == "LBU") {
+        if (tokens.size() < 5) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (tokens[2] != "[") return false;
+        if (!ParseRegister(tokens[3], &inst->rs)) return false;
+        if (tokens[4] != "]") {
+            if (!ParseOffset(tokens[4], reinterpret_cast<int8_t*>(&inst->imm))) return false;
+            if (tokens.size() < 6 || tokens[5] != "]") return false;
+        } else {
+            inst->imm = 0;
+        }
+        inst->op = Op::Lbu;
+        return true;
+    }
+    if (opName == "LHU") {
+        if (tokens.size() < 5) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (tokens[2] != "[") return false;
+        if (!ParseRegister(tokens[3], &inst->rs)) return false;
+        if (tokens[4] != "]") {
+            if (!ParseOffset(tokens[4], reinterpret_cast<int8_t*>(&inst->imm))) return false;
+            if (tokens.size() < 6 || tokens[5] != "]") return false;
+        } else {
+            inst->imm = 0;
+        }
+        inst->op = Op::Lhu;
+        return true;
+    }
+    if (opName == "SB") {
+        if (tokens.size() < 5) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (tokens[2] != "[") return false;
+        if (!ParseRegister(tokens[3], &inst->rs)) return false;
+        if (tokens[4] != "]") {
+            if (!ParseOffset(tokens[4], reinterpret_cast<int8_t*>(&inst->imm))) return false;
+            if (tokens.size() < 6 || tokens[5] != "]") return false;
+        } else {
+            inst->imm = 0;
+        }
+        inst->op = Op::Sb;
+        return true;
+    }
+    if (opName == "SH") {
+        if (tokens.size() < 5) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (tokens[2] != "[") return false;
+        if (!ParseRegister(tokens[3], &inst->rs)) return false;
+        if (tokens[4] != "]") {
+            if (!ParseOffset(tokens[4], reinterpret_cast<int8_t*>(&inst->imm))) return false;
+            if (tokens.size() < 6 || tokens[5] != "]") return false;
+        } else {
+            inst->imm = 0;
+        }
+        inst->op = Op::Sh;
         return true;
     }
     if (opName == "BEQ") {
@@ -222,6 +325,50 @@ static bool ParseLine(const std::string& line, Instruction* inst, std::string* l
         inst->op = Op::Sub;
         return true;
     }
+    if (opName == "SRLI") {
+        if (tokens.size() < 4) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (!ParseRegister(tokens[2], &inst->rs)) return false;
+        std::string immStr = tokens[3];
+        if (!immStr.empty() && immStr[0] == '#') immStr = immStr.substr(1);
+        int shamt = 0;
+        try {
+            shamt = std::stoi(immStr);
+        } catch (...) {
+            return false;
+        }
+        if (shamt < 0 || shamt > 63) return false;
+        inst->imm = static_cast<int16_t>(shamt);
+        inst->op = Op::Srli;
+        return true;
+    }
+    if (opName == "SLLI") {
+        if (tokens.size() < 4) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (!ParseRegister(tokens[2], &inst->rs)) return false;
+        std::string immStr = tokens[3];
+        if (!immStr.empty() && immStr[0] == '#') immStr = immStr.substr(1);
+        int shamt = 0;
+        try {
+            shamt = std::stoi(immStr);
+        } catch (...) {
+            return false;
+        }
+        if (shamt < 0 || shamt > 63) return false;
+        inst->imm = static_cast<int16_t>(shamt);
+        inst->op = Op::Slli;
+        return true;
+    }
+    if (opName == "AND") {
+        if (tokens.size() < 4) return false;
+        if (!ParseRegister(tokens[1], &inst->rd)) return false;
+        if (!ParseRegister(tokens[2], &inst->rs)) return false;
+        uint8_t rt = 0;
+        if (!ParseRegister(tokens[3], &rt)) return false;
+        inst->imm = static_cast<int16_t>(rt);
+        inst->op = Op::And;
+        return true;
+    }
 
     return false;
 }
@@ -236,10 +383,19 @@ static uint32_t EncodeInstruction(const Instruction& inst, const std::map<std::s
             return op << 24;
         case Op::Lui:
         case Op::Ori:
+        case Op::Andi:
             return (op << 24) | (static_cast<uint32_t>(inst.rd) << 16) | 
                    (static_cast<uint16_t>(inst.imm));
         case Op::Lw:
         case Op::Sw:
+        case Op::Lb:
+        case Op::Lh:
+        case Op::Lbu:
+        case Op::Lhu:
+        case Op::Sb:
+        case Op::Sh:
+        case Op::Srli:
+        case Op::Slli:
             return (op << 24) | (static_cast<uint32_t>(inst.rd) << 16) |
                    (static_cast<uint32_t>(inst.rs) << 8) |
                    static_cast<uint8_t>(inst.imm);
@@ -256,6 +412,7 @@ static uint32_t EncodeInstruction(const Instruction& inst, const std::map<std::s
         }
         case Op::Add:
         case Op::Sub:
+        case Op::And:
             return (op << 24) | (static_cast<uint32_t>(inst.rd) << 16) |
                    (static_cast<uint32_t>(inst.rs) << 8) |
                    static_cast<uint8_t>(inst.imm);

@@ -14,6 +14,7 @@ add_executable(tests
     unit/server_tests.cc
     unit/trace_tests.cc
     unit/uart_tests.cc
+    unit/uart_debug_tests.cc
     test_main.cc
 )
 

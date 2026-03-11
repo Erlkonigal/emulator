@@ -5,14 +5,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Generate hardware_config.h before building
+# Generate hardware_config.h from Kconfig
 find_package(Python3 REQUIRED)
 add_custom_command(
     OUTPUT "${CMAKE_SOURCE_DIR}/include/emulator/generated/hardware_config.h"
-    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/gen_config.py"
-    DEPENDS "${CMAKE_SOURCE_DIR}/config/hardware.conf"
-             "${CMAKE_SOURCE_DIR}/scripts/gen_config.py"
-    COMMENT "Generating hardware_config.h"
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/config.py" --gen
+    DEPENDS "${CMAKE_SOURCE_DIR}/config/.config"
+             "${CMAKE_SOURCE_DIR}/config/Kconfig"
+             "${CMAKE_SOURCE_DIR}/scripts/config.py"
+    COMMENT "Generating hardware_config.h from Kconfig"
     VERBATIM
 )
 add_custom_target(generate_config

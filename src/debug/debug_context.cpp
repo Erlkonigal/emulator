@@ -32,29 +32,33 @@ void DebugContext::outputLine(const std::string& line) {
     }
 }
 
-void DebugContext::run() {
+bool DebugContext::run() {
     if (mOnRun) {
-        mOnRun();
+        return mOnRun();
     }
+    return false;
 }
 
-void DebugContext::step(uint32_t count) {
+bool DebugContext::step(uint32_t count) {
     if (mOnStep) {
-        mOnStep(count);
+        return mOnStep(count);
     }
+    return false;
 }
 
-void DebugContext::pause() {
+bool DebugContext::pause() {
     if (mOnPause) {
-        mOnPause();
+        return mOnPause();
     }
+    return false;
 }
 
-void DebugContext::quit() {
+bool DebugContext::quit() {
     mQuitRequested.store(true, std::memory_order_release);
     if (mOnQuit) {
-        mOnQuit();
+        return mOnQuit();
     }
+    return true;
 }
 
 uint64_t DebugContext::readReg(uint32_t id) {

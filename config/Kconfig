@@ -1,32 +1,10 @@
 menu "Memory Configuration"
 
-config ROM_BASE
-    hex "ROM base address"
-    default 0x00000000
-    help
-        Base address for ROM memory region.
-
-config RAM_BASE
-    hex "RAM base address"
-    default 0x80000000
-    help
-        Base address for RAM memory region.
-
 config RAM_SIZE
     hex "RAM size"
     default 0x10000000
     help
         Size of RAM memory region (default 256MB).
-
-endmenu
-
-menu "Peripheral Configuration"
-
-config UART_BASE
-    hex "UART base address"
-    default 0x10000000
-    help
-        Base address for UART peripheral.
 
 config UART_SIZE
     hex "UART size"
@@ -99,5 +77,16 @@ config PADDING
     default 64
     help
         Padding for cache line alignment.
+
+endmenu
+
+menu "Trace Configuration"
+
+config ENABLE_TRACE
+    bool "Enable trace functionality"
+    default n
+    help
+        Enable trace functionality at compile time.
+        When disabled, all TRACE() macros become no-ops with zero runtime overhead.
 
 endmenu

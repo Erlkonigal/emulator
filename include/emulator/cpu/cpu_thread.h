@@ -9,9 +9,9 @@
 class CpuThread : public IThread, public Singleton<CpuThread> {
 public:
     void init(std::shared_ptr<ICpuExecutor> cpu);
-    void start() override;
-    void stop() override;
-    void reset() override;
+    bool start() override;
+    bool stop() override;
+    bool reset() override;
 
 private:
     void threadLoop() override;

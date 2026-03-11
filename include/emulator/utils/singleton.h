@@ -5,6 +5,7 @@ public:
   Singleton(const Singleton &) = delete;
   Singleton &operator=(const Singleton &) = delete;
 
+  [[gnu::const]]
   static T &getInstance() {
     static T instance;
     return instance;

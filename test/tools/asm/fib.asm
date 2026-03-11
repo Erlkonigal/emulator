@@ -1,62 +1,112 @@
-# Fibonacci sequence demo (loop version)
-# Computes: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34
-# Outputs each result via UART
-# UART base: 0x10000000
-# RAM base:  0x80000000
+# Fibonacci - compute 40 iterations, output final result as "0xXXXXXXXX\r\n"
+# fib(40) = 102334155 = 0x061A884B
+# 32-bit architecture: 8 hex digits
 
-    # Initialize counter (10 iterations)
-    LUI r4, 0x0000
-    ORI r4, 0x000A
-
-    # Initialize result pointer (RAM address)
-    LUI r5, 0x8000
-    ORI r5, 0x0200
-
-    # Initialize fib(0) = 0, fib(1) = 1
+    # r1 = fib_prev (starts 0)
+    # r2 = fib_curr (starts 1)
     LUI r1, 0x0000
     LUI r2, 0x0000
     ORI r2, 0x0001
-    
-    # Set r6 = UART base address
-    LUI r6, 0x1000
 
-loop:
-    # Store fib(n-2) to memory
-    SW r1, [r5]
+    # r3 = counter = 40
+    LUI r3, 0x0000
+    ORI r3, 0x0028
 
-    # Output fib(n-2) to UART
-    # Wait for UART TX ready (status bit 0 = 1)
-wait_tx:
-    LW r7, [r6, 4]
-    ANDI r7, 0x0001
-    BEQ r7, r0, wait_tx
-    
-    # Output r1 to UART
-    SW r1, [r6, 0]
+    # r5 = 1
+    LUI r5, 0x0000
+    ORI r5, 0x0001
 
-    # r3 = r1 + r2 (next fibonacci)
-    ADD r3, r1, r2
-
-    # Shift: r1 = r2, r2 = r3
+fib_loop:
+    ADD r14, r1, r2
     ADD r1, r2, r0
-    ADD r2, r3, r0
+    ADD r2, r14, r0
+    SUB r3, r3, r5
+    BEQ r3, r0, output
+    BEQ r0, r0, fib_loop
 
-    # Decrement counter: r4 = r4 - 1
-    LUI r7, 0x0000
-    ORI r7, 0x0001
-    SUB r4, r4, r7
+output:
+    # r6 = UART base (0x10000000)
+    LUI r6, 0x1000
+    
+    # Output "0x"
+wait_tx_0:
+    LBU r12, [r6, 4]
+    ANDI r12, 0x0001
+    BEQ r12, r0, wait_tx_0
+    LUI r12, 0x0030
+    ORI r12, 0x0030
+    SB r12, [r6, 0]
 
-    # Advance pointer: r5 = r5 + 4
-    LUI r7, 0x0000
-    ORI r7, 0x0004
-    ADD r5, r5, r7
+wait_tx_x:
+    LBU r12, [r6, 4]
+    ANDI r12, 0x0001
+    BEQ r12, r0, wait_tx_x
+    LUI r12, 0x0078
+    ORI r12, 0x0078
+    SB r12, [r6, 0]
 
-    # Check if r4 != 0, continue loop
-    BEQ r4, r0, done
-    BEQ r0, r0, loop
+    # Output 8 hex digits for 32-bit value in r2
+    # r13 = value to output
+    ADD r13, r2, r0
+    # r4 = digit count = 8
+    LUI r4, 0x0000
+    ORI r4, 0x0008
+
+hex_loop:
+    # Get top nibble (bits 31:28)
+    SRLI r9, r13, 28
+    # Shift right by 4 for next nibble
+    SLLI r13, r13, 4
+    
+    # r7 = '0' = 0x30
+    LUI r7, 0x0030
+    ORI r7, 0x0030
+    
+    # r12 = nibble + '0'
+    ADD r12, r9, r7
+
+    # Check if nibble >= 10 (need A-F)
+    # nibble >= 10 if (nibble & 8) && (nibble & 6)
+    ADD r15, r9, r0
+    ANDI r15, 0x0008
+    BEQ r15, r0, output_nibble
+    ADD r15, r9, r0
+    ANDI r15, 0x0006
+    BEQ r15, r0, output_nibble
+    # nibble >= 10, add 7: 'A' = '0' + 10 + 7 = 0x41
+    LUI r15, 0x0000
+    ORI r15, 0x0007
+    ADD r12, r12, r15
+
+output_nibble:
+wait_tx_nibble:
+    LBU r15, [r6, 4]
+    ANDI r15, 0x0001
+    BEQ r15, r0, wait_tx_nibble
+    SB r12, [r6, 0]
+
+    SUB r4, r4, r5
+    BEQ r4, r0, output_crlf
+    BEQ r0, r0, hex_loop
+
+output_crlf:
+    # Output '\r'
+wait_tx_cr:
+    LBU r12, [r6, 4]
+    ANDI r12, 0x0001
+    BEQ r12, r0, wait_tx_cr
+    LUI r12, 0x0000
+    ORI r12, 0x000D
+    SB r12, [r6, 0]
+
+    # Output '\n'
+wait_tx_lf:
+    LBU r12, [r6, 4]
+    ANDI r12, 0x0001
+    BEQ r12, r0, wait_tx_lf
+    LUI r12, 0x0000
+    ORI r12, 0x000A
+    SB r12, [r6, 0]
 
 done:
     HALT
-
-dead_loop:
-    BEQ r0, r0, dead_loop

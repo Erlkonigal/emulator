@@ -14,10 +14,10 @@ public:
 
     void processCommand(const std::string& command);
 
-    void setControlCallbacks(std::function<void()> onRun,
-                              std::function<void(uint32_t)> onStep,
-                              std::function<void()> onPause,
-                              std::function<void()> onQuit = nullptr) {
+    void setControlCallbacks(std::function<bool()> onRun,
+                              std::function<bool(uint32_t)> onStep,
+                              std::function<bool()> onPause,
+                              std::function<bool()> onQuit = nullptr) {
         mContext.setControlCallbacks(std::move(onRun), std::move(onStep),
                                       std::move(onPause), std::move(onQuit));
     }

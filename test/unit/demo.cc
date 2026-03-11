@@ -15,7 +15,7 @@ std::shared_ptr<ICpuExecutor> createCpuExecutor() {
 }
 
 int main(int argc, char* argv[]) {
-    int rc = RunEmulator(argc, argv);
+    int rc = RunEmulator(argc, argv);    
     ToyCpuExecutor* cpu = GetLastToyCpu();
     if (cpu != nullptr) {
         std::cout << "\n=== CPU State ===\n";

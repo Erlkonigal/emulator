@@ -11,13 +11,13 @@
 class CommitThread : public IThread, public Singleton<CommitThread> {
 public:
     void init();
-    void start() override;
-    void stop() override;
-    void reset() override;
+    bool start() override;
+    bool stop() override;
+    bool reset() override;
 
-    void run();
-    void pause();
-    void step(uint32_t count);
+    bool run();
+    bool pause();
+    bool step(uint32_t count);
 
     CommitThreadState getState() const { return mStateMachine.getState(); }
 
@@ -32,7 +32,7 @@ private:
     ProcessResult processCommits(const CommitInfo *commits, size_t numCommits,
                                  CommitThreadState currentState);
 
-    StateMachine<CommitThreadState> mStateMachine{CommitThreadState::Halted,
+    StateMachine<CommitThreadState> mStateMachine{CommitThreadState::Init,
                                                    getCommitThreadTransitions()};
     std::atomic<size_t> mStepCount{0};
 

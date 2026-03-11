@@ -1,8 +1,7 @@
 #include "emulator/app.h"
-#include "emulator/bus/bus.h"
-#include "emulator/bus/ram.h"
-#include "emulator/bus/rom.h"
-#include "emulator/bus/uart.h"
+#include "emulator/device/ram.h"
+#include "emulator/device/rom.h"
+#include "emulator/device/uart.h"
 #include "emulator/commit/commit_queue.h"
 #include "emulator/commit/commit_thread.h"
 #include "emulator/commit/shadow_arch.h"
@@ -31,11 +30,12 @@ void EmulatorReset() {
   CpuThread::getInstance().reset();
   CommitThread::getInstance().reset();
   CommitQueue::getInstance().reset();
-  ShadowArch::getInstance().reset();
+  ShadowArch::getInstance().init();
   BreakPointController::getInstance().reset();
-  Bus::getInstance().clear();
   Debugger::getInstance().reset();
   RuntimeConfig::getInstance().reset();
+  Ram::getInstance().reset();
+  Uart::getInstance().reset();
 }
 
 int RunEmulator(int argc, char **argv) {
@@ -103,19 +103,13 @@ int RunEmulator(int argc, char **argv) {
     return 1;
   }
 
-  auto& bus = Bus::getInstance();
-
   auto& rom = Rom::getInstance();
-  rom.init(kRomBase, romData);
-  bus.registerDevice(&rom);
+  rom.init(romData);
 
   auto& ram = Ram::getInstance();
-  ram.init(kRamBase, config.ramSize);
-  bus.registerDevice(&ram);
+  ram.init(config.ramSize);
 
-  auto& uart = Uart::getInstance();
-  uart.setBaseAddr(kUartBase);
-  bus.registerDevice(&uart);
+  (void)Uart::getInstance();
 
   auto cpu = createCpuExecutor();
   if (!cpu) {
@@ -124,43 +118,50 @@ int RunEmulator(int argc, char **argv) {
   }
 
   Debugger::getInstance().setControlCallbacks(
-      [&]() { CommitThread::getInstance().run(); },
-      [&](uint32_t count) { CommitThread::getInstance().step(count); },
-      [&]() { CommitThread::getInstance().pause(); },
-      [&]() { NetworkInputHandler::getInstance().requestStop(); });
+      [&]() { return CommitThread::getInstance().run(); },
+      [&](uint32_t count) { return CommitThread::getInstance().step(count); },
+      [&]() { return CommitThread::getInstance().pause(); },
+      [&]() { NetworkInputHandler::getInstance().requestStop(); return true; });
 
-  Terminal::getInstance().setup();
+  Terminal::getInstance().setup(!config.debug);
 
   CpuThread::getInstance().init(cpu);
-  CpuThread::getInstance().start();
-  CommitThread::getInstance().start();
+  if (!CpuThread::getInstance().start()) {
+    ERROR("Failed to start CpuThread");
+    return 1;
+  }
+  if (!CommitThread::getInstance().start()) {
+    ERROR("Failed to start CommitThread");
+    return 1;
+  }
+
+  auto runEventLoop = [&]<typename CheckFunc>(CheckFunc&& shouldContinue) {
+    while (shouldContinue() && !Terminal::getInstance().wasInterrupted()) {
+      Terminal::getInstance().processIo();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return Terminal::getInstance().wasInterrupted();
+  };
 
   if (config.debug) {
     INFO("Debug mode: starting debug server on port %u", config.debugPort);
     NetworkInputHandler::getInstance().start(config.debugPort);
-
-    while (NetworkInputHandler::getInstance().isRunning()) {
-      Terminal::getInstance().processIo();
-      if (Terminal::getInstance().wasInterrupted()) {
-        INFO("Interrupted, stopping...");
-        NetworkInputHandler::getInstance().stop();
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    bool interrupted = runEventLoop([]{ return NetworkInputHandler::getInstance().isRunning(); });
+    if (interrupted) {
+      INFO("Interrupted, stopping...");
     }
-
     NetworkInputHandler::getInstance().stop();
   } else {
     INFO("Running emulator (Ctrl+C to exit)");
-    CommitThread::getInstance().run();
-
-    while (CommitThread::getInstance().getState() != CommitThreadState::Halted) {
-      Terminal::getInstance().processIo();
-      if (Terminal::getInstance().wasInterrupted()) {
-        INFO("Interrupted, exiting...");
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!CommitThread::getInstance().run()) {
+      ERROR("Failed to run CommitThread");
+    }
+    bool interrupted = runEventLoop([]{
+      auto state = CommitThread::getInstance().getState();
+      return state != CommitThreadState::Halted && state != CommitThreadState::Init;
+    });
+    if (interrupted) {
+      INFO("Interrupted, exiting...");
     }
   }
 

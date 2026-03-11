@@ -4,6 +4,7 @@
 #include <utility>
 
 enum class CommitThreadState {
+    Init,
     Halted,
     Paused,
     Running,
@@ -13,7 +14,7 @@ enum class CommitThreadState {
 inline std::set<std::pair<CommitThreadState, CommitThreadState>>
 getCommitThreadTransitions() {
     return {
-        {CommitThreadState::Halted, CommitThreadState::Paused},
+        {CommitThreadState::Init, CommitThreadState::Paused},
         {CommitThreadState::Paused, CommitThreadState::Running},
         {CommitThreadState::Paused, CommitThreadState::Step},
         {CommitThreadState::Running, CommitThreadState::Paused},

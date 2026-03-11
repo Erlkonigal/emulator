@@ -10,17 +10,14 @@ const std::string& TraceManager::getTraceFile() const {
     return mTraceFile;
 }
 
-void TraceManager::removeTracer(const std::string& name) {
-    mTracers.erase(name);
-    mEnabledSet.erase(name);
+void TraceManager::removeTracer(std::string_view name) {
+    std::string key(name);
+    mTracers.erase(key);
+    mEnabledSet.erase(key);
 }
 
-void TraceManager::trace(const std::string& name, const char* fmt, ...) {
-    if (!isEnabled(name)) {
-        return;
-    }
-    
-    auto it = mTracers.find(name);
+void TraceManager::trace(std::string_view name, const char* fmt, ...) {
+    auto it = mTracers.find(std::string(name));
     if (it == mTracers.end()) {
         return;
     }
@@ -35,21 +32,22 @@ void TraceManager::trace(const std::string& name, const char* fmt, ...) {
     it->second->trace("%s", buffer);
 }
 
-bool TraceManager::setEnabled(const std::string& name, bool enabled) {
+bool TraceManager::setEnabled(std::string_view name, bool enabled) {
+    std::string key(name);
     if (enabled) {
-        mEnabledSet.insert(name);
+        mEnabledSet.insert(key);
     } else {
-        mEnabledSet.erase(name);
+        mEnabledSet.erase(key);
     }
     return true;
 }
 
-bool TraceManager::isEnabled(const std::string& name) const {
-    return mEnabledSet.find(name) != mEnabledSet.end();
+bool TraceManager::isEnabled(std::string_view name) const {
+    return mEnabledSet.find(std::string(name)) != mEnabledSet.end();
 }
 
-Tracer* TraceManager::getTracer(const std::string& name) const {
-    auto it = mTracers.find(name);
+Tracer* TraceManager::getTracer(std::string_view name) const {
+    auto it = mTracers.find(std::string(name));
     if (it == mTracers.end()) {
         return nullptr;
     }
@@ -65,6 +63,6 @@ std::vector<std::string> TraceManager::listTracers() const {
     return names;
 }
 
-bool TraceManager::hasTracer(const std::string& name) const {
-    return mTracers.find(name) != mTracers.end();
+bool TraceManager::hasTracer(std::string_view name) const {
+    return mTracers.find(std::string(name)) != mTracers.end();
 }

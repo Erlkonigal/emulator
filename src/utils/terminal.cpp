@@ -1,5 +1,5 @@
 #include "emulator/utils/terminal.h"
-#include "emulator/bus/uart.h"
+#include "emulator/device/uart.h"
 #include "emulator/log/logger.h"
 
 #include <fcntl.h>
@@ -24,7 +24,7 @@ void signalHandler(int) {
 }
 }
 
-void Terminal::setup() {
+void Terminal::setup(bool enableSignals) {
     if (mConfigured) {
         return;
     }
@@ -42,7 +42,10 @@ void Terminal::setup() {
     termios raw = *original;
     raw.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
     // raw.c_oflag &= ~OPOST;
-    raw.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+    raw.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN);
+    if (!enableSignals) {
+        raw.c_lflag &= ~ISIG;
+    }
     raw.c_cflag &= ~(CSIZE | PARENB);
     raw.c_cflag |= CS8;
     raw.c_cc[VMIN] = 0;
@@ -132,21 +135,26 @@ void Terminal::processIo() {
         if (uart.popTx(&byte)) {
             if (byte == '\n') {
                 const char* crlf = "\r\n";
-                write(STDOUT_FILENO, crlf, 2);
+                ssize_t ignored = write(STDOUT_FILENO, crlf, 2);
+                (void)ignored;
             } else if (byte == '\r') {
                 // skip
             } else if (byte == 0x7f || byte == 0x08) {
                 const char* backspace = "\b \b";
-                write(STDOUT_FILENO, backspace, 3);
+                ssize_t ignored = write(STDOUT_FILENO, backspace, 3);
+                (void)ignored;
             } else if (byte >= 32 && byte < 127) {
                 char c = static_cast<char>(byte);
-                write(STDOUT_FILENO, &c, 1);
+                ssize_t ignored = write(STDOUT_FILENO, &c, 1);
+                (void)ignored;
             } else if (byte == '\t') {
-                write(STDOUT_FILENO, "\t", 1);
+                ssize_t ignored = write(STDOUT_FILENO, "\t", 1);
+                (void)ignored;
             } else {
                 char escaped[8];
                 snprintf(escaped, sizeof(escaped), "^%c", byte + 64);
-                write(STDOUT_FILENO, escaped, 2);
+                ssize_t ignored = write(STDOUT_FILENO, escaped, 2);
+                (void)ignored;
             }
         }
     }

@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-#include "emulator/bus/uart.h"
+#include "emulator/device/uart.h"
 #include "emulator/debug/breakpoint.h"
 #include "emulator/debug/debugger.h"
 #include "emulator/debug/input/network_input_handler.h"
@@ -27,6 +27,7 @@ TEST(integration_ram_rw) {
   std::vector<uint32_t> prog;
 
   toy::Emit(&prog, toy::Lui(1, 0x8000));
+  toy::Emit(&prog, toy::Ori(1, 0x0100));
   toy::Emit(&prog, toy::Lui(2, 0x1122));
   toy::Emit(&prog, toy::Ori(2, 0x3344));
   toy::Emit(&prog, toy::Sw(2, 1, 0));
@@ -106,6 +107,28 @@ TEST(integration_halt) {
 
 namespace {
 
+bool WaitForServerReady(uint16_t port, int maxAttempts = 50, int delayMs = 2) {
+    for (int i = 0; i < maxAttempts; ++i) {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            continue;
+        }
+        struct sockaddr_in addr;
+        std::memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = htons(port);
+        if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+            close(fd);
+            return true;
+        }
+        close(fd);
+        std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+    }
+    return false;
+}
+
 uint16_t FindAvailablePort(uint16_t start) {
     for (uint16_t port = start; port < start + 100; ++port) {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -167,7 +190,7 @@ std::string RecvWithTimeout(int fd, size_t maxLen, int timeoutMs) {
         
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = 100000;
+        tv.tv_usec = 1000;
         
         int ret = select(fd + 1, &readfds, nullptr, nullptr, &tv);
         if (ret <= 0) continue;
@@ -190,16 +213,16 @@ TEST(e2e_network_input_handler_help_command) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     SendLine(clientFd, "help");
     
-    std::string response = RecvWithTimeout(clientFd, 2048, 1000);
+    std::string response = RecvWithTimeout(clientFd, 2048, 100);
     EXPECT_TRUE(response.find("Available commands") != std::string::npos ||
                 response.find("run") != std::string::npos);
     
@@ -215,16 +238,16 @@ TEST(e2e_network_input_handler_regs_command) {
     Debugger::getInstance().reset();
     
     ASSERT_TRUE(handler.start(port));
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     SendLine(clientFd, "regs");
     
-    std::string response = RecvWithTimeout(clientFd, 4096, 1000);
+    std::string response = RecvWithTimeout(clientFd, 4096, 200);
     EXPECT_TRUE(response.find("r0") != std::string::npos);
     EXPECT_TRUE(response.find("r31") != std::string::npos || 
                 response.find("dbg>") != std::string::npos);
@@ -244,23 +267,23 @@ TEST(e2e_network_input_handler_bp_operations) {
     bpCtrl.reset();
     
     ASSERT_TRUE(handler.start(port));
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     SendLine(clientFd, "bp add 0x80000000");
-    std::string resp1 = RecvWithTimeout(clientFd, 1024, 500);
+    std::string resp1 = RecvWithTimeout(clientFd, 1024, 100);
     
     SendLine(clientFd, "bp list");
-    std::string resp2 = RecvWithTimeout(clientFd, 1024, 500);
+    std::string resp2 = RecvWithTimeout(clientFd, 1024, 200);
     EXPECT_TRUE(resp2.find("80000000") != std::string::npos ||
                 resp2.find("Breakpoints") != std::string::npos);
     
     SendLine(clientFd, "bp del 0x80000000");
-    std::string resp3 = RecvWithTimeout(clientFd, 1024, 500);
+    std::string resp3 = RecvWithTimeout(clientFd, 1024, 100);
     
     close(clientFd);
     handler.stop();
@@ -270,19 +293,19 @@ TEST(e2e_network_input_handler_mem_command) {
     uint16_t port = FindAvailablePort(16500);
     ASSERT_TRUE(port > 0);
     
-    auto& handler = NetworkInputHandler::getInstance();
+auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     SendLine(clientFd, "mem 0x80000000 32");
     
-    std::string response = RecvWithTimeout(clientFd, 1024, 500);
+    std::string response = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(!response.empty());
     EXPECT_TRUE(response.find("80000000") != std::string::npos ||
                 response.find("dbg>") != std::string::npos);
@@ -298,16 +321,16 @@ TEST(e2e_network_input_handler_quit_disconnects) {
     auto& handler = NetworkInputHandler::getInstance();
     ASSERT_TRUE(handler.start(port));
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     int clientFd = ConnectToServer(port);
     ASSERT_TRUE(clientFd >= 0);
     
-    RecvWithTimeout(clientFd, 1024, 500);
+    RecvWithTimeout(clientFd, 1024, 100);
     
     SendLine(clientFd, "quit");
     
-    std::string response = RecvWithTimeout(clientFd, 1024, 500);
+    std::string response = RecvWithTimeout(clientFd, 1024, 100);
     EXPECT_TRUE(response.find("Goodbye") != std::string::npos);
     
     std::this_thread::sleep_for(std::chrono::milliseconds(100));

@@ -7,7 +7,7 @@
 
 class Terminal : public Singleton<Terminal> {
 public:
-    void setup();
+    void setup(bool enableSignals = false);
     void restore();
     void setInterruptFlag(std::atomic<bool>* flag);
     void processIo();

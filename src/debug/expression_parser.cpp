@@ -185,17 +185,15 @@ uint64_t ExpressionParser::parseFactor() {
   return 0;
 }
 
-uint64_t ExpressionParser::readMemory(const uint64_t &addr,
+uint64_t ExpressionParser::readMemory(const uint64_t &offset,
                                       const uint32_t &width) {
-  bool inRam = (addr >= kRamBase && addr < kRamBase + kRamSize);
-
-  if (!inRam)
+  if (offset >= kRamSize)
     return 0;
 
   uint64_t val = 0;
   for (uint32_t i = 0; i < width; ++i) {
     uint8_t byte = static_cast<uint8_t>(
-        ShadowArch::getInstance().readMem(addr + i - kRamBase));
+        ShadowArch::getInstance().readMem(offset + i));
     val |= (static_cast<uint64_t>(byte) << (i * 8));
   }
   return val;

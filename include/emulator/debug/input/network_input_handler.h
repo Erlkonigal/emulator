@@ -10,17 +10,15 @@
 class NetworkInputHandler : public IThread, public Singleton<NetworkInputHandler> {
 public:
     bool start(uint16_t port = kDefaultDebugPort);
-    void stop() override;
-    void reset() override { stop(); }
+    bool stop() override;
+    bool reset() override { return stop(); }
 
     void requestStop() { setRunning(false); }
     void broadcast(const std::string& message);
 
 private:
-    void start() override {}
+    bool start() override { return false; }
     void threadLoop() override;
-
-    void serverThread();
     void handleClient(int clientFd);
 
     int mListenFd = -1;

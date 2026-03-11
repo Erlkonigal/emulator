@@ -19,17 +19,17 @@ struct alignas(kPadding) CommitInfo {
   bool valid;
   // fetch
   uint64_t pc;
-  uint32_t inst;
+  uint64_t inst;
   char decode[kMaxInstDecodeLen];
   // register access
   bool isRegWrite;
-  uint32_t regId;
-  uint32_t regData;
+  uint64_t regId;
+  uint64_t regData;
   // mem access
-  bool isMemWrite;
-  bool isMemUncached;
-  uint64_t memAddress;
-  uint32_t memData;
+  bool isRamWrite;
+  bool isUncached;
+  uint64_t ramOffset;
+  uint64_t ramData;
   // csr ctrl
   // including csr instructions, trap and interrupt
   // if there is csr access, we will allocate a CsrState and put it here

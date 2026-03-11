@@ -15,26 +15,30 @@ void CpuThread::init(std::shared_ptr<ICpuExecutor> cpu) {
     mCpu->reset();
 }
 
-void CpuThread::start() {
+bool CpuThread::start() {
     setStarted(true);
     setRunning(true);
     mThread = std::thread(&CpuThread::threadLoop, this);
+    return true;
 }
 
-void CpuThread::stop() {
+bool CpuThread::stop() {
     setRunning(false);
     joinThread();
+    return true;
 }
 
-void CpuThread::reset() {
+bool CpuThread::reset() {
     stop();
     mCpu.reset();
     setStarted(false);
+    return true;
 }
 
 void CpuThread::threadLoop() {
+    auto& queue = CommitQueue::getInstance();
     while (isRunning()) {
-        auto *array = (CommitArray *)CommitQueue::getInstance().alloc(
+        auto *array = (CommitArray *)queue.alloc(
             std::extent<CommitArray>::value);
 
         if (array == nullptr) {
@@ -55,6 +59,6 @@ void CpuThread::threadLoop() {
             continue;
         }
 
-        CommitQueue::getInstance().push(numValidCommits);
+        queue.push(numValidCommits);
     }
 }

@@ -22,20 +22,20 @@ public:
         mOutputHandler = std::move(handler);
     }
 
-    void setControlCallbacks(std::function<void()> onRun,
-                              std::function<void(uint32_t)> onStep,
-                              std::function<void()> onPause,
-                              std::function<void()> onQuit) {
+    void setControlCallbacks(std::function<bool()> onRun,
+                              std::function<bool(uint32_t)> onStep,
+                              std::function<bool()> onPause,
+                              std::function<bool()> onQuit) {
         mOnRun = std::move(onRun);
         mOnStep = std::move(onStep);
         mOnPause = std::move(onPause);
         mOnQuit = std::move(onQuit);
     }
 
-    void run();
-    void step(uint32_t count);
-    void pause();
-    void quit();
+    bool run();
+    bool step(uint32_t count);
+    bool pause();
+    bool quit();
     bool wasQuitRequested() const { return mQuitRequested.load(); }
 
     uint64_t readReg(uint32_t id);
@@ -54,9 +54,9 @@ private:
     std::atomic<DebuggerState> mState{DebuggerState::Idle};
     std::atomic<bool> mQuitRequested{false};
 
-    std::function<void()> mOnRun;
-    std::function<void(uint32_t)> mOnStep;
-    std::function<void()> mOnPause;
-    std::function<void()> mOnQuit;
+    std::function<bool()> mOnRun;
+    std::function<bool(uint32_t)> mOnStep;
+    std::function<bool()> mOnPause;
+    std::function<bool()> mOnQuit;
     std::function<void(const std::string&)> mOutputHandler;
 };

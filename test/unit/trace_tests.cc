@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "emulator/bus/bus.h"
-#include "emulator/bus/ram.h"
+#include "emulator/device/ram.h"
+#include "emulator/device/rom.h"
 #include "emulator/log/tracer.h"
 #include "emulator/log/trace_manager.h"
 #include "toy/toy_cpu_executor.h"
@@ -69,19 +69,12 @@ struct TraceTestContext {
   Tracer tracer;
 
   explicit TraceTestContext() {
-    tracer.init({.name = "TEST"});
-
-    Bus::getInstance().clear();
+    tracer.init({.name = "TEST", .handler = nullptr});
 
     auto& ram = Ram::getInstance();
-    ram.init(0, 65536);
-    Bus::getInstance().registerDevice(&ram);
+    ram.init(65536);
 
     Cpu = std::make_unique<ToyCpuExecutor>();
-  }
-
-  ~TraceTestContext() {
-    Bus::getInstance().clear();
   }
 
   void RunSteps(int steps) {
@@ -104,11 +97,14 @@ struct TraceTestContext {
   }
 
   void WriteProgram(const std::vector<uint32_t> &prog) {
-    uint64_t addr = 0;
-    for (uint32_t inst : prog) {
-      Cpu->writeMem(addr, inst);
-      addr += 4;
+    std::vector<uint8_t> romData(prog.size() * 4);
+    for (size_t i = 0; i < prog.size(); ++i) {
+      romData[i * 4] = prog[i] & 0xff;
+      romData[i * 4 + 1] = (prog[i] >> 8) & 0xff;
+      romData[i * 4 + 2] = (prog[i] >> 16) & 0xff;
+      romData[i * 4 + 3] = (prog[i] >> 24) & 0xff;
     }
+    Rom::getInstance().init(romData);
   }
 };
 
@@ -131,7 +127,7 @@ TEST(trace_custom_formatter) {
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     char buf[128];
-    std::snprintf(buf, sizeof(buf), "CUSTOM: 0x%lx %x", commit.pc, commit.inst);
+    std::snprintf(buf, sizeof(buf), "CUSTOM: 0x%lx %lx", commit.pc, commit.inst);
     return std::string(buf);
   };
 
@@ -148,7 +144,7 @@ TEST(trace_itrace_only) {
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     char buf[256];
-    std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08x %s", commit.pc,
+    std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08lx %s", commit.pc,
                   commit.inst, Decode(commit.inst).c_str());
     return std::string(buf);
   };
@@ -168,7 +164,7 @@ TEST(trace_itrace_mtrace_combo) {
 
   ctx.Formatter = [&](const CommitInfo &commit) -> std::string {
     char buf[256];
-    std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08x", commit.pc,
+    std::snprintf(buf, sizeof(buf), "PC:0x%08lx Inst:0x%08lx", commit.pc,
                   commit.inst);
     return std::string(buf);
   };

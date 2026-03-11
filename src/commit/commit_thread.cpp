@@ -15,44 +15,63 @@ void CommitThread::init() {
     TraceManager::getInstance().createTracer<Tracer>("itrace");
 }
 
-void CommitThread::start() {
+bool CommitThread::start() {
+    if (!mStateMachine.transition(CommitThreadState::Paused)) {
+        return false;
+    }
     setStarted(true);
-    mStateMachine.forceTransition(CommitThreadState::Paused);
     mThread = std::thread(&CommitThread::threadLoop, this);
+    return true;
 }
 
-void CommitThread::stop() {
-    mStateMachine.forceTransition(CommitThreadState::Halted);
+bool CommitThread::stop() {
+    CommitThreadState state = mStateMachine.getState();
+    if (state != CommitThreadState::Init && state != CommitThreadState::Halted) {
+        mStateMachine.forceTransition(CommitThreadState::Halted);
+    }
     joinThread();
+    return true;
 }
 
-void CommitThread::reset() {
-    stop();
+bool CommitThread::reset() {
+    CommitThreadState state = mStateMachine.getState();
+    if (state != CommitThreadState::Init && state != CommitThreadState::Halted) {
+        mStateMachine.forceTransition(CommitThreadState::Halted);
+    }
+    joinThread();
     mStepCount.store(0, std::memory_order_release);
     setStarted(false);
+    mStateMachine.forceTransition(CommitThreadState::Init);
+    return true;
 }
 
-void CommitThread::run() {
-    mStateMachine.transition(CommitThreadState::Running);
+bool CommitThread::run() {
+    return mStateMachine.transition(CommitThreadState::Running);
 }
 
-void CommitThread::step(uint32_t count) {
+bool CommitThread::step(uint32_t count) {
     mStepCount.store(count, std::memory_order_release);
-    mStateMachine.transition(CommitThreadState::Step);
+    return mStateMachine.transition(CommitThreadState::Step);
 }
 
-void CommitThread::pause() {
-    mStateMachine.transition(CommitThreadState::Paused);
+bool CommitThread::pause() {
+    CommitThreadState state = mStateMachine.getState();
+    if (state == CommitThreadState::Running || state == CommitThreadState::Step) {
+        return mStateMachine.transitionFrom(state, CommitThreadState::Paused);
+    }
+    return false;
 }
 
 void CommitThread::threadLoop() {
+    auto& queue = CommitQueue::getInstance();
+    
     while (true) {
         CommitThreadState state = mStateMachine.getState();
 
         switch (state) {
         case CommitThreadState::Running: {
             size_t numFrontCommits = 0;
-            CommitInfo *commits = CommitQueue::getInstance().front(
+            CommitInfo *commits = queue.front(
                 kMaxNumCommitsPerConsumption, numFrontCommits);
             if (numFrontCommits == 0) {
                 std::this_thread::yield();
@@ -60,7 +79,7 @@ void CommitThread::threadLoop() {
             }
 
             auto result = processCommits(commits, numFrontCommits, state);
-            CommitQueue::getInstance().pop(result.processedCount);
+            queue.pop(result.processedCount);
 
             if (result.nextState != state) {
                 mStateMachine.forceTransition(result.nextState);
@@ -77,14 +96,14 @@ void CommitThread::threadLoop() {
 
             size_t numFrontCommits = 0;
             CommitInfo *commits =
-                CommitQueue::getInstance().front(remaining, numFrontCommits);
+                queue.front(remaining, numFrontCommits);
             if (numFrontCommits == 0) {
                 std::this_thread::yield();
                 continue;
             }
 
             auto result = processCommits(commits, numFrontCommits, state);
-            CommitQueue::getInstance().pop(result.processedCount);
+            queue.pop(result.processedCount);
 
             if (result.nextState != CommitThreadState::Step) {
                 mStepCount.store(0, std::memory_order_release);
@@ -99,6 +118,7 @@ void CommitThread::threadLoop() {
             std::this_thread::yield();
             break;
 
+        case CommitThreadState::Init:
         case CommitThreadState::Halted:
             return;
         }
@@ -119,9 +139,9 @@ CommitThread::ProcessResult CommitThread::processCommits(const CommitInfo *commi
             if (commit.isRegWrite) {
                 TRACE("itrace", "         REG x%u <- 0x%08x", commit.regId, commit.regData);
             }
-            if (commit.isMemWrite) {
-                TRACE("itrace", "         MEM [0x%08lx] <- 0x%08x",
-                      (unsigned long)commit.memAddress, commit.memData);
+            if (commit.isRamWrite) {
+                TRACE("itrace", "         RAM [0x%08lx] <- 0x%08x",
+                      (unsigned long)commit.ramOffset, commit.ramData);
             }
         }
 

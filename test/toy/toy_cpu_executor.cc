@@ -1,6 +1,9 @@
 #include "toy_cpu_executor.h"
 
-#include "emulator/bus/bus.h"
+#include "emulator/device/ram.h"
+#include "emulator/device/rom.h"
+#include "emulator/device/uart.h"
+#include "emulator/generated/hardware_config.h"
 
 #include <cstring>
 #include <iostream>
@@ -8,6 +11,9 @@
 #include "toy_isa.h"
 
 namespace {
+
+using toy::kRamBase;
+using toy::kUartBase;
 
 ToyCpuExecutor *g_last = nullptr;
 
@@ -44,11 +50,11 @@ void ToyCpuExecutor::reset() {
   mLastFault = CpuErrorType::None;
 }
 
-void ToyCpuExecutor::setResetPc(uint64_t pc) { mResetPc = pc; }
+void ToyCpuExecutor::setResetPc(uint64_t pc) { mResetPc = static_cast<uint32_t>(pc); }
 
-uint64_t ToyCpuExecutor::getPc() const { return mPc; }
+uint32_t ToyCpuExecutor::getPc() const { return mPc; }
 
-void ToyCpuExecutor::setPc(uint64_t pc) { mPc = pc; }
+void ToyCpuExecutor::setPc(uint32_t pc) { mPc = pc; }
 
 uint64_t ToyCpuExecutor::getCycle() const { return mCycle; }
 
@@ -68,14 +74,14 @@ void ToyCpuExecutor::getCsrState(CsrState &state) const {
 
 size_t ToyCpuExecutor::getCsrCount() const { return kCsrCount; }
 
-uint64_t ToyCpuExecutor::getRegister(uint32_t regId) const {
+uint32_t ToyCpuExecutor::getRegister(uint32_t regId) const {
   if (regId >= kRegCount || regId == 0) {
     return 0;
   }
   return mRegs[regId];
 }
 
-void ToyCpuExecutor::setRegister(uint32_t regId, uint64_t value) {
+void ToyCpuExecutor::setRegister(uint32_t regId, uint32_t value) {
   if (regId >= kRegCount || regId == 0) {
     return;
   }
@@ -84,20 +90,89 @@ void ToyCpuExecutor::setRegister(uint32_t regId, uint64_t value) {
 
 CpuErrorType ToyCpuExecutor::getLastError() const { return mLastFault; }
 
-void ToyCpuExecutor::writeMem(uint64_t addr, uint32_t data) {
-  auto& bus = Bus::getInstance();
+uint8_t ToyCpuExecutor::readByte(uint32_t addr) const {
+  uint8_t b = 0;
+  
+  if (addr >= kUartBase && addr < kUartBase + kUartSize) {
+    Uart::getInstance().read(addr - kUartBase, &b, 1);
+  } else if (addr >= kRamBase) {
+    Ram::getInstance().read(addr - kRamBase, &b, 1);
+  } else {
+    Rom::getInstance().read(addr, &b, 1);
+  }
+  
+  return b;
+}
+
+uint16_t ToyCpuExecutor::readHalf(uint32_t addr) const {
+  if (addr >= kUartBase && addr < kUartBase + kUartSize) {
+    return 0;
+  }
+  
+  uint16_t val = 0;
+  uint8_t bytes[2] = {0, 0};
+  
+  if (addr >= kRamBase) {
+    Ram::getInstance().read(addr - kRamBase, bytes, 2);
+  } else {
+    Rom::getInstance().read(addr, bytes, 2);
+  }
+  
+  val = static_cast<uint16_t>(bytes[0]) | (static_cast<uint16_t>(bytes[1]) << 8);
+  return val;
+}
+
+void ToyCpuExecutor::writeByte(uint32_t addr, uint8_t data) {
+  if (addr >= kUartBase && addr < kUartBase + kUartSize) {
+    Uart::getInstance().write(addr - kUartBase, &data, 1);
+  } else if (addr >= kRamBase) {
+    Ram::getInstance().write(addr - kRamBase, &data, 1);
+  }
+}
+
+void ToyCpuExecutor::writeHalf(uint32_t addr, uint16_t data) {
+  if (addr >= kUartBase && addr < kUartBase + kUartSize) {
+    return;
+  }
+  
+  uint8_t bytes[2];
+  bytes[0] = data & 0xff;
+  bytes[1] = (data >> 8) & 0xff;
+  
+  if (addr >= kRamBase) {
+    Ram::getInstance().write(addr - kRamBase, bytes, 2);
+  }
+}
+
+void ToyCpuExecutor::writeMem(uint32_t addr, uint32_t data) {
+  if (addr >= kUartBase && addr < kUartBase + kUartSize) {
+    return;
+  }
+  
   uint8_t bytes[4];
   bytes[0] = data & 0xff;
   bytes[1] = (data >> 8) & 0xff;
   bytes[2] = (data >> 16) & 0xff;
   bytes[3] = (data >> 24) & 0xff;
-  bus.write(addr, bytes, 4);
+  
+  if (addr >= kRamBase) {
+    Ram::getInstance().write(addr - kRamBase, bytes, 4);
+  }
 }
 
-uint32_t ToyCpuExecutor::readMem(uint64_t addr) const {
-  auto& bus = Bus::getInstance();
+uint32_t ToyCpuExecutor::readMem(uint32_t addr) const {
+  if (addr >= kUartBase && addr < kUartBase + kUartSize) {
+    return 0;
+  }
+  
   uint8_t bytes[4] = {0, 0, 0, 0};
-  bus.read(addr, bytes, 4);
+  
+  if (addr >= kRamBase) {
+    Ram::getInstance().read(addr - kRamBase, bytes, 4);
+  } else {
+    Rom::getInstance().read(addr, bytes, 4);
+  }
+  
   return static_cast<uint32_t>(bytes[0]) |
          (static_cast<uint32_t>(bytes[1]) << 8) |
          (static_cast<uint32_t>(bytes[2]) << 16) |
@@ -112,16 +187,17 @@ void ToyCpuExecutor::cycle(CommitArray &commits) {
     commits[i].valid = false;
   }
 
-  uint64_t pcBefore = mPc;
+  uint32_t pcBefore = mPc;
   commit.pc = mPc;
   commit.isRegWrite = false;
-  commit.isMemWrite = false;
+  commit.isRamWrite = false;
+  commit.isUncached = false;
   commit.isCsrAccess = false;
   commit.errorType = CpuErrorType::None;
   commit.regId = 0;
   commit.regData = 0;
-  commit.memAddress = 0;
-  commit.memData = 0;
+  commit.ramOffset = 0;
+  commit.ramData = 0;
 
   uint32_t inst = readMem(mPc);
   commit.inst = inst;
@@ -131,86 +207,230 @@ void ToyCpuExecutor::cycle(CommitArray &commits) {
   uint8_t op = OpCode(inst);
   commit.valid = true;
 
-  if (op == static_cast<uint8_t>(toy::Op::Nop)) {
-  } else if (op == static_cast<uint8_t>(toy::Op::Halt)) {
+  switch (op) {
+  case static_cast<uint8_t>(toy::Op::Nop):
+    break;
+
+  case static_cast<uint8_t>(toy::Op::Halt):
     commit.errorType = CpuErrorType::Halt;
     commit.errorMsg = "Halt instruction";
     mLastFault = CpuErrorType::Halt;
-  } else if (op == static_cast<uint8_t>(toy::Op::Lui)) {
+    break;
+
+  case static_cast<uint8_t>(toy::Op::Lui): {
     uint8_t rd = Rd(inst);
     uint16_t imm = Imm16(inst);
-    uint64_t value = static_cast<uint64_t>(imm) << 16;
-
+    uint32_t value = static_cast<uint32_t>(imm) << 16;
     commit.isRegWrite = true;
     commit.regId = rd;
-    commit.regData = static_cast<uint32_t>(value);
+    commit.regData = value;
     setRegister(rd, value);
-  } else if (op == static_cast<uint8_t>(toy::Op::Ori)) {
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Ori): {
     uint8_t rd = Rd(inst);
     uint16_t imm = Imm16(inst);
-    uint64_t value = getRegister(rd) | static_cast<uint64_t>(imm);
-
+    uint32_t value = getRegister(rd) | imm;
     commit.isRegWrite = true;
     commit.regId = rd;
-    commit.regData = static_cast<uint32_t>(value);
+    commit.regData = value;
     setRegister(rd, value);
-  } else if (op == static_cast<uint8_t>(toy::Op::Beq)) {
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Andi): {
+    uint8_t rd = Rd(inst);
+    uint16_t imm = Imm16(inst);
+    uint32_t value = getRegister(rd) & imm;
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Beq): {
     uint8_t r0 = Rd(inst);
     uint8_t r1 = Rs(inst);
     int8_t off = Off8(inst);
-
     bool taken = getRegister(r0) == getRegister(r1);
     if (taken) {
       mPc = pcBefore + OffsetToWords(off);
     }
-  } else if (op == static_cast<uint8_t>(toy::Op::Lw)) {
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Lw): {
     uint8_t rd = Rd(inst);
     uint8_t rs = Rs(inst);
     int8_t off = Off8(inst);
-    uint64_t addr = getRegister(rs) + static_cast<int64_t>(off);
-
-    uint32_t value = readMem(addr);
-
+    uint32_t offset = getRegister(rs) + static_cast<int32_t>(off);
+    uint32_t value = readMem(offset);
     commit.isRegWrite = true;
     commit.regId = rd;
     commit.regData = value;
-
     setRegister(rd, value);
-  } else if (op == static_cast<uint8_t>(toy::Op::Sw)) {
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Sw): {
     uint8_t rd = Rd(inst);
     uint8_t rs = Rs(inst);
     int8_t off = Off8(inst);
-    uint64_t addr = getRegister(rs) + static_cast<int64_t>(off);
-    uint32_t data = static_cast<uint32_t>(getRegister(rd) & 0xffffffffu);
+    uint32_t offset = getRegister(rs) + static_cast<int32_t>(off);
+    uint32_t data = getRegister(rd);
+    commit.isRamWrite = true;
+    commit.ramOffset = offset;
+    commit.ramData = data;
+    writeMem(offset, data);
+    break;
+  }
 
-    commit.isMemWrite = true;
-    commit.memAddress = addr;
-    commit.memData = data;
-
-    writeMem(addr, data);
-  } else if (op == static_cast<uint8_t>(toy::Op::Add)) {
+  case static_cast<uint8_t>(toy::Op::Add): {
     uint8_t rd = Rd(inst);
     uint8_t rs = Rs(inst);
     uint8_t rt = Off8(inst);
-    uint64_t value = getRegister(rs) + getRegister(rt);
-
+    uint32_t value = getRegister(rs) + getRegister(rt);
     commit.isRegWrite = true;
     commit.regId = rd;
-    commit.regData = static_cast<uint32_t>(value);
+    commit.regData = value;
     setRegister(rd, value);
-  } else if (op == static_cast<uint8_t>(toy::Op::Sub)) {
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Sub): {
     uint8_t rd = Rd(inst);
     uint8_t rs = Rs(inst);
     uint8_t rt = Off8(inst);
-    uint64_t value = getRegister(rs) - getRegister(rt);
-
+    uint32_t value = getRegister(rs) - getRegister(rt);
     commit.isRegWrite = true;
     commit.regId = rd;
-    commit.regData = static_cast<uint32_t>(value);
+    commit.regData = value;
     setRegister(rd, value);
-  } else {
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Lb): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    int8_t off = Off8(inst);
+    uint32_t addr = getRegister(rs) + static_cast<int32_t>(off);
+    uint8_t val = readByte(addr);
+    uint32_t value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(val)));
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Lh): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    int8_t off = Off8(inst);
+    uint32_t addr = getRegister(rs) + static_cast<int32_t>(off);
+    uint16_t val = readHalf(addr);
+    uint32_t value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(val)));
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Lbu): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    int8_t off = Off8(inst);
+    uint32_t addr = getRegister(rs) + static_cast<int32_t>(off);
+    uint8_t value = readByte(addr);
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Lhu): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    int8_t off = Off8(inst);
+    uint32_t addr = getRegister(rs) + static_cast<int32_t>(off);
+    uint16_t value = readHalf(addr);
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Sb): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    int8_t off = Off8(inst);
+    uint32_t addr = getRegister(rs) + static_cast<int32_t>(off);
+    uint8_t data = static_cast<uint8_t>(getRegister(rd));
+    commit.isRamWrite = true;
+    commit.ramOffset = addr;
+    commit.ramData = data;
+    writeByte(addr, data);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Sh): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    int8_t off = Off8(inst);
+    uint32_t addr = getRegister(rs) + static_cast<int32_t>(off);
+    uint16_t data = static_cast<uint16_t>(getRegister(rd));
+    commit.isRamWrite = true;
+    commit.ramOffset = addr;
+    commit.ramData = data;
+    writeHalf(addr, data);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Srli): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    uint8_t shamt = Off8(inst) & 0x1f;
+    uint32_t value = getRegister(rs) >> shamt;
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::Slli): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    uint8_t shamt = Off8(inst) & 0x1f;
+    uint32_t value = getRegister(rs) << shamt;
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  case static_cast<uint8_t>(toy::Op::And): {
+    uint8_t rd = Rd(inst);
+    uint8_t rs = Rs(inst);
+    uint8_t rt = Off8(inst);
+    uint32_t value = getRegister(rs) & getRegister(rt);
+    commit.isRegWrite = true;
+    commit.regId = rd;
+    commit.regData = value;
+    setRegister(rd, value);
+    break;
+  }
+
+  default:
     commit.errorType = CpuErrorType::Stop;
     commit.errorMsg = "Unknown opcode";
     mLastFault = CpuErrorType::Stop;
+    break;
   }
 }

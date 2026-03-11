@@ -1,9 +1,11 @@
 #include "emulator/debug/breakpoint.h"
 
+#include <format>
+
 void BreakPointController::list(std::vector<std::string> &out) const {
   size_t index = 0;
   for (const auto &bp : mBreakPoints) {
-    out.push_back(std::to_string(index++) + ":\t" + std::to_string(bp));
+    out.push_back(std::format("{}:\t0x{:x}", index++, bp));
   }
 }
 

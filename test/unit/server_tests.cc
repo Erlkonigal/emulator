@@ -15,6 +15,28 @@
 
 namespace {
 
+bool WaitForServerReady(uint16_t port, int maxAttempts = 50, int delayMs = 2) {
+    for (int i = 0; i < maxAttempts; ++i) {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            continue;
+        }
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = htons(port);
+        if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+            close(fd);
+            return true;
+        }
+        close(fd);
+        std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+    }
+    return false;
+}
+
 uint16_t FindAvailablePort(uint16_t start) {
     for (uint16_t port = start; port < start + 100; ++port) {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -48,7 +70,7 @@ TEST(server_network_input_handler_start_stop) {
     ASSERT_TRUE(started);
     EXPECT_TRUE(handler.isRunning());
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    ASSERT_TRUE(WaitForServerReady(port));
     
     handler.stop();
     EXPECT_TRUE(!handler.isRunning());

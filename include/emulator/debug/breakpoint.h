@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <set>
+#include <unordered_set>
 #include <string>
 #include <vector>
 
@@ -16,7 +16,7 @@ public:
   void reset();
 
 private:
-  std::set<uint64_t> mBreakPoints;
+  std::unordered_set<uint64_t> mBreakPoints;
 
   friend class Singleton<BreakPointController>;
 };

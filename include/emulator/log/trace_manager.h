@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -17,14 +18,14 @@ public:
     template<typename T>
     T* createTracer(const std::string& name);
     
-    void removeTracer(const std::string& name);
+    void removeTracer(std::string_view name);
     
-    void trace(const std::string& name, const char* fmt, ...);
-    bool setEnabled(const std::string& name, bool enabled);
-    bool isEnabled(const std::string& name) const;
-    Tracer* getTracer(const std::string& name) const;
+    void trace(std::string_view name, const char* fmt, ...);
+    bool setEnabled(std::string_view name, bool enabled);
+    bool isEnabled(std::string_view name) const;
+    Tracer* getTracer(std::string_view name) const;
     std::vector<std::string> listTracers() const;
-    bool hasTracer(const std::string& name) const;
+    bool hasTracer(std::string_view name) const;
 
 private:
     std::unordered_map<std::string, std::unique_ptr<Tracer>> mTracers;
@@ -44,7 +45,7 @@ T* TraceManager::createTracer(const std::string& name) {
     }
     
     auto tracer = std::make_unique<T>();
-    tracer->init({.name = name});
+    tracer->init({.name = name, .handler = nullptr});
     
     T* rawPtr = tracer.get();
     mTracers[name] = std::move(tracer);

@@ -6,6 +6,10 @@
 
 namespace toy {
 
+constexpr uint64_t kRomBase = 0x00000000;
+constexpr uint64_t kRamBase = 0x80000000;
+constexpr uint64_t kUartBase = 0x10000000;
+
 enum class Op : uint8_t {
     Nop = 0x00,
     Lui = 0x01,
@@ -15,6 +19,16 @@ enum class Op : uint8_t {
     Beq = 0x05,
     Add = 0x06,
     Sub = 0x07,
+    Andi = 0x08,
+    Lb = 0x09,
+    Lh = 0x0a,
+    Lbu = 0x0b,
+    Lhu = 0x0c,
+    Sb = 0x0d,
+    Sh = 0x0e,
+    Srli = 0x0f,
+    Slli = 0x10,
+    And = 0x11,
     Halt = 0x7f,
 };
 
@@ -24,9 +38,6 @@ inline uint32_t EncodeRImm16(Op op, uint8_t rd, uint16_t imm) {
 }
 
 inline uint32_t EncodeMem(Op op, uint8_t r0, uint8_t r1, int8_t off) {
-    // op r0, [r1 + off]
-    // For SW: store r0 -> [r1+off]
-    // For LW: load [r1+off] -> r0
     return (static_cast<uint32_t>(op) << 24) | (static_cast<uint32_t>(r0) << 16) |
         (static_cast<uint32_t>(r1) << 8) | static_cast<uint8_t>(off);
 }
@@ -70,6 +81,49 @@ inline uint32_t Add(uint8_t rd, uint8_t rs, uint8_t rt) {
 
 inline uint32_t Sub(uint8_t rd, uint8_t rs, uint8_t rt) {
     return (static_cast<uint32_t>(Op::Sub) << 24) | (static_cast<uint32_t>(rd) << 16) |
+           (static_cast<uint32_t>(rs) << 8) | static_cast<uint8_t>(rt);
+}
+
+inline uint32_t Andi(uint8_t rd, uint16_t imm16) {
+    return EncodeRImm16(Op::Andi, rd, imm16);
+}
+
+inline uint32_t Lb(uint8_t rd, uint8_t rs, int8_t off) {
+    return EncodeMem(Op::Lb, rd, rs, off);
+}
+
+inline uint32_t Lh(uint8_t rd, uint8_t rs, int8_t off) {
+    return EncodeMem(Op::Lh, rd, rs, off);
+}
+
+inline uint32_t Lbu(uint8_t rd, uint8_t rs, int8_t off) {
+    return EncodeMem(Op::Lbu, rd, rs, off);
+}
+
+inline uint32_t Lhu(uint8_t rd, uint8_t rs, int8_t off) {
+    return EncodeMem(Op::Lhu, rd, rs, off);
+}
+
+inline uint32_t Sb(uint8_t rd, uint8_t rs, int8_t off) {
+    return EncodeMem(Op::Sb, rd, rs, off);
+}
+
+inline uint32_t Sh(uint8_t rd, uint8_t rs, int8_t off) {
+    return EncodeMem(Op::Sh, rd, rs, off);
+}
+
+inline uint32_t Srli(uint8_t rd, uint8_t rs, uint8_t shamt) {
+    return (static_cast<uint32_t>(Op::Srli) << 24) | (static_cast<uint32_t>(rd) << 16) |
+           (static_cast<uint32_t>(rs) << 8) | (shamt & 0x3f);
+}
+
+inline uint32_t Slli(uint8_t rd, uint8_t rs, uint8_t shamt) {
+    return (static_cast<uint32_t>(Op::Slli) << 24) | (static_cast<uint32_t>(rd) << 16) |
+           (static_cast<uint32_t>(rs) << 8) | (shamt & 0x3f);
+}
+
+inline uint32_t And(uint8_t rd, uint8_t rs, uint8_t rt) {
+    return (static_cast<uint32_t>(Op::And) << 24) | (static_cast<uint32_t>(rd) << 16) |
            (static_cast<uint32_t>(rs) << 8) | static_cast<uint8_t>(rt);
 }
 

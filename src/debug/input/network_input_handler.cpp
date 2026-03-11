@@ -74,7 +74,7 @@ bool NetworkInputHandler::start(uint16_t port) {
 
     setStarted(true);
     setRunning(true);
-    mThread = std::thread(&NetworkInputHandler::serverThread, this);
+    mThread = std::thread(&NetworkInputHandler::threadLoop, this);
 
     auto& debugger = Debugger::getInstance();
     debugger.setOutputHandler([this](const std::string& msg) { broadcast(msg); });
@@ -89,7 +89,7 @@ bool NetworkInputHandler::start(uint16_t port) {
     return true;
 }
 
-void NetworkInputHandler::stop() {
+bool NetworkInputHandler::stop() {
     setRunning(false);
     Logger::getInstance().setHandler(nullptr);
     
@@ -112,12 +112,10 @@ void NetworkInputHandler::stop() {
         mListenFd = -1;
     }
     setStarted(false);
+    return true;
 }
 
 void NetworkInputHandler::threadLoop() {
-}
-
-void NetworkInputHandler::serverThread() {
     while (isRunning()) {
         struct sockaddr_in clientAddr;
         socklen_t clientLen = sizeof(clientAddr);

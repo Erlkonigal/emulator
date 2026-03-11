@@ -8,8 +8,10 @@
 
 class ShadowArch : public Singleton<ShadowArch> {
 public:
+  void init();
   void update(const CommitInfo &commit);
   void reset();
+  ~ShadowArch();
 
   uint64_t readReg(uint32_t regId) const {
     if (regId < kMaxNumRegisters)
@@ -24,7 +26,7 @@ public:
       return 0;
   }
   uint8_t readMem(uint64_t offset) const {
-    if (offset < kRamSize)
+    if (mem && offset < kRamSize)
       return mem[offset];
     else
       return 0;
@@ -35,6 +37,6 @@ private:
   uint64_t pc = 0;
   RegState regs = {};
   CsrState csrs = {};
-  uint8_t mem[kRamSize] = {};
+  uint8_t* mem = nullptr;
   friend class Singleton<ShadowArch>;
 };

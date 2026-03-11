@@ -7,9 +7,9 @@ class IThread {
 public:
     virtual ~IThread() = default;
 
-    virtual void start() = 0;
-    virtual void stop() = 0;
-    virtual void reset() = 0;
+    virtual bool start() = 0;
+    virtual bool stop() = 0;
+    virtual bool reset() = 0;
 
     bool isRunning() const { return mRunning.load(std::memory_order_acquire); }
     bool wasStarted() const { return mStarted.load(std::memory_order_acquire); }
