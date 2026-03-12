@@ -5,6 +5,8 @@
 #include <cstring>
 #include <ctime>
 
+namespace emulator {
+
 namespace {
 
 constexpr size_t kBufferSize = 4096;
@@ -78,3 +80,5 @@ void Tracer::trace(const char* fmt, ...) {
         std::fflush(mFile);
     }
 }
+
+} // namespace emulator

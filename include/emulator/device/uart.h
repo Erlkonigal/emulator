@@ -9,6 +9,8 @@
 #include "emulator/generated/hardware_config.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 constexpr size_t kUartFifoDepth = 1024;
 
 class Uart : public Singleton<Uart>, public IDevice {
@@ -37,3 +39,5 @@ private:
     alignas(64) std::atomic<uint32_t> mTxTail{0};
     std::array<uint8_t, kUartFifoDepth> mTxBuffer{};
 };
+
+} // namespace emulator

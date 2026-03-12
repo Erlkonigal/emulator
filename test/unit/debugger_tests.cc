@@ -8,6 +8,10 @@
 #include "emulator/debug/debugger.h"
 #include "emulator/generated/hardware_config.h"
 
+using emulator::BreakPointController;
+using emulator::Debugger;
+using emulator::ShadowArch;
+
 namespace {
 
 bool gPauseCalled = false;

@@ -10,6 +10,8 @@
 #include <iomanip>
 #include <sstream>
 
+namespace emulator {
+
 void RunCommand::execute(std::istringstream& args, DebugContext& ctx) {
     (void)args;
     if (ctx.state() == DebuggerState::Halted) {
@@ -246,3 +248,5 @@ void registerAllCommands() {
     registry.registerCommand(std::make_unique<TraceCommand>());
     registry.registerCommand(std::make_unique<HelpCommand>());
 }
+
+} // namespace emulator

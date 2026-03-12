@@ -8,6 +8,8 @@
 
 #include "emulator/debug/debug_state.h"
 
+namespace emulator {
+
 class DebugContext {
 public:
     void reset();
@@ -60,3 +62,5 @@ private:
     std::function<bool()> mOnQuit;
     std::function<void(const std::string&)> mOutputHandler;
 };
+
+} // namespace emulator

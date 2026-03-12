@@ -3,6 +3,8 @@
 #include "emulator/log/logger.h"
 #include "emulator/utils/utils.h"
 
+namespace emulator {
+
 void CommandRegistry::registerCommand(std::unique_ptr<ICommand> cmd) {
     if (cmd) {
         mCommands[cmd->name()] = std::move(cmd);
@@ -41,3 +43,5 @@ std::vector<std::pair<std::string, std::string>> CommandRegistry::getCommandHelp
 void CommandRegistry::reset() {
     mCommands.clear();
 }
+
+} // namespace emulator

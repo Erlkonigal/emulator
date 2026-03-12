@@ -10,6 +10,8 @@
 #include "emulator/log/tracer.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class TraceManager : public Singleton<TraceManager> {
 public:
     void setTraceFile(const std::string& path);
@@ -52,3 +54,5 @@ T* TraceManager::createTracer(const std::string& name) {
     
     return rawPtr;
 }
+
+} // namespace emulator

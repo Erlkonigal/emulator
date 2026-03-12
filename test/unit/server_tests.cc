@@ -13,6 +13,8 @@
 #include "emulator/debug/input/network_input_handler.h"
 #include "emulator/generated/hardware_config.h"
 
+using emulator::NetworkInputHandler;
+
 namespace {
 
 bool WaitForServerReady(uint16_t port, int maxAttempts = 50, int delayMs = 2) {

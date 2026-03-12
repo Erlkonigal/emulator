@@ -1,6 +1,8 @@
 #include "emulator/device/uart.h"
 #include "emulator/log/logger.h"
 
+namespace emulator {
+
 Uart::Uart() {}
 
 void Uart::reset() {
@@ -119,3 +121,5 @@ bool Uart::hasRxData() const {
     uint32_t tail = mRxTail.load(std::memory_order_acquire);
     return head != tail;
 }
+
+} // namespace emulator

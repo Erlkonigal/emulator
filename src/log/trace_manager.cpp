@@ -2,6 +2,8 @@
 
 #include <cstdarg>
 
+namespace emulator {
+
 void TraceManager::setTraceFile(const std::string& path) {
     mTraceFile = path;
 }
@@ -66,3 +68,5 @@ std::vector<std::string> TraceManager::listTracers() const {
 bool TraceManager::hasTracer(std::string_view name) const {
     return mTracers.find(std::string(name)) != mTracers.end();
 }
+
+} // namespace emulator

@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstring>
 
+namespace emulator {
+
 void Ram::init(uint64_t size) {
     if (mData != nullptr) {
         munmap(mData, mSize);
@@ -63,3 +65,5 @@ bool Ram::write(uint64_t offset, const uint8_t* data, size_t len) {
     }
     return true;
 }
+
+} // namespace emulator

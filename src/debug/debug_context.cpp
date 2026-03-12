@@ -8,6 +8,8 @@
 
 #include <cstdarg>
 
+namespace emulator {
+
 void DebugContext::reset() {
     mState.store(DebuggerState::Idle, std::memory_order_release);
     mQuitRequested.store(false, std::memory_order_release);
@@ -106,3 +108,5 @@ void DebugContext::setLogLevel(int level) {
 void DebugContext::setTraceEnabled(const std::string& name, bool enabled) {
     TraceManager::getInstance().setEnabled(name, enabled);
 }
+
+} // namespace emulator

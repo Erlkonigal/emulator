@@ -5,6 +5,8 @@
 
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class ExpressionParser : public Singleton<ExpressionParser> {
 public:
   uint64_t parse(const std::string &expr);
@@ -47,3 +49,5 @@ private:
 
   friend class Singleton<ExpressionParser>;
 };
+
+} // namespace emulator

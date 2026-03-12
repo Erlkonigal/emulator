@@ -5,6 +5,8 @@
 #include <mutex>
 #include <string>
 
+namespace emulator {
+
 class Tracer {
 public:
     struct Config {
@@ -26,3 +28,5 @@ protected:
     FILE* mFile = nullptr;
     std::function<void(const char*)> mHandler;
 };
+
+} // namespace emulator

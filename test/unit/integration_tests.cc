@@ -21,6 +21,14 @@
 #include "toy/toy_cpu_executor.h"
 #include "toy/toy_isa.h"
 
+using emulator::BreakPointController;
+using emulator::CpuErrorType;
+using emulator::Debugger;
+using emulator::GetLastToyCpu;
+using emulator::NetworkInputHandler;
+using emulator::ToyCpuExecutor;
+using emulator::Uart;
+
 void RegisterIntegrationTests() {}
 
 TEST(integration_ram_rw) {

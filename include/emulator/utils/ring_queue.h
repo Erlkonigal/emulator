@@ -24,6 +24,8 @@
 #error "Magic Ring Buffer implementation requires Linux (mmap/memfd_create)"
 #endif
 
+namespace emulator {
+
 template <typename T> class RingQueue {
   // Safety check: T must be POD
   static_assert(std::is_trivial_v<T>, "T must be a trivial type (POD)");
@@ -205,3 +207,5 @@ private:
   alignas(kPadding) std::atomic<size_t> mTail{0};
   size_t mCachedHead{0};
 };
+
+} // namespace emulator

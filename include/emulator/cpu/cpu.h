@@ -5,6 +5,8 @@
 
 #include "emulator/generated/hardware_config.h"
 
+namespace emulator {
+
 enum class CpuErrorType {
   None,
   Stop,
@@ -64,3 +66,5 @@ public:
   virtual size_t getRegCount() const = 0;
   virtual size_t getCsrCount() const = 0;
 };
+
+} // namespace emulator

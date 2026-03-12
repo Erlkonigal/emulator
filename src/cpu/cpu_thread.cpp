@@ -7,6 +7,8 @@
 
 #include <algorithm>
 
+namespace emulator {
+
 void CpuThread::init(std::shared_ptr<ICpuExecutor> cpu) {
     mCpu = cpu;
     if (!mCpu) {
@@ -62,3 +64,5 @@ void CpuThread::threadLoop() {
         queue.push(numValidCommits);
     }
 }
+
+} // namespace emulator

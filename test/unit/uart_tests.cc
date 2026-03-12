@@ -5,6 +5,9 @@
 
 #include "emulator/device/uart.h"
 
+using emulator::Uart;
+using emulator::kUartFifoDepth;
+
 TEST(uart_read_empty_rx_returns_zero) {
     Uart& uart = Uart::getInstance();
     

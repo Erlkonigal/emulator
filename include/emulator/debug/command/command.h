@@ -3,6 +3,8 @@
 #include <sstream>
 #include <string>
 
+namespace emulator {
+
 class DebugContext;
 
 class ICommand {
@@ -12,3 +14,5 @@ public:
     virtual std::string help() const = 0;
     virtual void execute(std::istringstream& args, DebugContext& ctx) = 0;
 };
+
+} // namespace emulator

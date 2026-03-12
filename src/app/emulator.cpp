@@ -26,6 +26,8 @@
 #include <thread>
 #include <vector>
 
+namespace emulator {
+
 void EmulatorReset() {
   CpuThread::getInstance().reset();
   CommitThread::getInstance().reset();
@@ -172,3 +174,5 @@ int RunEmulator(int argc, char **argv) {
 
   return Debugger::getInstance().hadError();
 }
+
+} // namespace emulator

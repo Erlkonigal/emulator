@@ -6,6 +6,8 @@
 #include "emulator/device/device.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class Ram : public Singleton<Ram>, public IDevice {
 public:
     void init(uint64_t size);
@@ -24,3 +26,5 @@ private:
     Ram() = default;
     friend class Singleton<Ram>;
 };
+
+} // namespace emulator

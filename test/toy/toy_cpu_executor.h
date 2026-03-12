@@ -5,9 +5,7 @@
 
 #include "emulator/cpu/cpu.h"
 
-class ToyCpuExecutor;
-
-ToyCpuExecutor *GetLastToyCpu();
+namespace emulator {
 
 class ToyCpuExecutor : public ICpuExecutor {
 public:
@@ -50,5 +48,9 @@ private:
 
   CpuErrorType mLastFault = CpuErrorType::None;
 };
+
+ToyCpuExecutor *GetLastToyCpu();
+
+} // namespace emulator
 
 #endif

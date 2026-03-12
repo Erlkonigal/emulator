@@ -7,6 +7,8 @@
 #include <set>
 #include <unordered_map>
 
+namespace emulator {
+
 template <typename State> class StateMachine {
 public:
     using TransitionKey = std::pair<State, State>;
@@ -86,3 +88,5 @@ protected:
     std::condition_variable mCondVar;
     TransitionCallback mOnTransition;
 };
+
+} // namespace emulator

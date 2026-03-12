@@ -8,7 +8,9 @@
 #include <limits>
 #include <string>
 
-namespace {
+namespace emulator {
+
+namespace detail {
 
 inline bool isSpaceChar(char ch) {
   return std::isspace(static_cast<unsigned char>(ch)) != 0;
@@ -23,27 +25,28 @@ inline bool isEmpty(const std::string &text) { return text.empty(); }
 inline bool isHexDigitChar(char ch) {
   return std::isxdigit(static_cast<unsigned char>(ch)) != 0;
 }
-} // namespace
+
+} // namespace detail
 
 inline std::string toLower(const std::string &text) {
   std::string out;
   out.reserve(text.size());
   for (char ch : text) {
-    out.push_back(toLowerChar(ch));
+    out.push_back(detail::toLowerChar(ch));
   }
   return out;
 }
 
 inline void trimInPlace(std::string *text) {
-  if (text == nullptr || isEmpty(*text)) {
+  if (text == nullptr || detail::isEmpty(*text)) {
     return;
   }
   size_t start = 0;
-  while (start < text->size() && isSpaceChar((*text)[start])) {
+  while (start < text->size() && detail::isSpaceChar((*text)[start])) {
     ++start;
   }
   size_t end = text->size();
-  while (end > start && isSpaceChar((*text)[end - 1])) {
+  while (end > start && detail::isSpaceChar((*text)[end - 1])) {
     --end;
   }
   if (start == 0 && end == text->size()) {
@@ -84,7 +87,7 @@ inline bool parseU64(const std::string &text, uint64_t *value) {
   if (value == nullptr) {
     return false;
   }
-  if (isEmpty(text)) {
+  if (detail::isEmpty(text)) {
     return false;
   }
   errno = 0;
@@ -93,7 +96,7 @@ inline bool parseU64(const std::string &text, uint64_t *value) {
     uint64_t parsed = 0;
     for (size_t i = 2; i < text.size(); ++i) {
       char ch = text[i];
-      if (!isHexDigitChar(ch)) {
+      if (!detail::isHexDigitChar(ch)) {
         return false;
       }
       parsed <<= 4;
@@ -178,3 +181,5 @@ inline bool parseU64Arg(const char *option, const std::string &text,
   *out = parsed;
   return true;
 }
+
+} // namespace emulator

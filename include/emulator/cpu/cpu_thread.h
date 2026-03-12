@@ -6,6 +6,8 @@
 
 #include <memory>
 
+namespace emulator {
+
 class CpuThread : public IThread, public Singleton<CpuThread> {
 public:
     void init(std::shared_ptr<ICpuExecutor> cpu);
@@ -20,3 +22,5 @@ private:
 
     friend class Singleton<CpuThread>;
 };
+
+} // namespace emulator

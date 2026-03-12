@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstring>
 
+namespace emulator {
+
 void Rom::init(const std::vector<uint8_t>& data) {
     mData = data;
 }
@@ -38,3 +40,5 @@ bool Rom::write(uint64_t offset, const uint8_t* data, size_t len) {
     (void)len;
     return false;
 }
+
+} // namespace emulator

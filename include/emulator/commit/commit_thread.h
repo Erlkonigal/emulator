@@ -8,6 +8,8 @@
 #include "emulator/thread/state_machine.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class CommitThread : public IThread, public Singleton<CommitThread> {
 public:
     void init();
@@ -38,3 +40,5 @@ private:
 
     friend class Singleton<CommitThread>;
 };
+
+} // namespace emulator

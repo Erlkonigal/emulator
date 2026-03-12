@@ -7,6 +7,8 @@
 #include "emulator/device/device.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class Rom : public Singleton<Rom>, public IDevice {
 public:
     void init(const std::vector<uint8_t>& data);
@@ -25,3 +27,5 @@ private:
     Rom() = default;
     friend class Singleton<Rom>;
 };
+
+} // namespace emulator

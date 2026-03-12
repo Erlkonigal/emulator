@@ -5,6 +5,8 @@
 #include "emulator/utils/ring_queue.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class CommitQueue : public RingQueue<CommitInfo>,
                     public Singleton<CommitQueue> {
 public:
@@ -12,3 +14,5 @@ public:
       : RingQueue<CommitInfo>(capacity) {}
   friend class Singleton<CommitQueue>;
 };
+
+} // namespace emulator

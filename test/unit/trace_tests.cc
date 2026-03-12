@@ -16,6 +16,14 @@
 #include "toy/toy_cpu_executor.h"
 #include "toy/toy_isa.h"
 
+using emulator::CommitArray;
+using emulator::CommitInfo;
+using emulator::Ram;
+using emulator::Rom;
+using emulator::ToyCpuExecutor;
+using emulator::TraceManager;
+using emulator::Tracer;
+
 namespace {
 
 uint8_t OpCode(uint32_t inst) {

@@ -6,12 +6,21 @@
 #include "emulator/cpu/cpu.h"
 #include "toy/toy_cpu_executor.h"
 
+namespace emulator {
+
 std::shared_ptr<ICpuExecutor> createCpuExecutor() {
   auto cpu = std::make_shared<ToyCpuExecutor>();
   return cpu;
 }
 
+} // namespace emulator
+
 namespace testutil {
+
+using emulator::CpuErrorType;
+using emulator::RunEmulator;
+using emulator::ToyCpuExecutor;
+using emulator::GetLastToyCpu;
 
 std::filesystem::path RomDir() {
   return std::filesystem::path("test") / "build" / "rom";

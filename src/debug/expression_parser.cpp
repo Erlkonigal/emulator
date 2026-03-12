@@ -6,6 +6,8 @@
 #include <cctype>
 #include <string>
 
+namespace emulator {
+
 uint64_t ExpressionParser::parse(const std::string &expr) {
   mExpr = expr;
   mPos = 0;
@@ -217,3 +219,5 @@ uint64_t ExpressionParser::getRegisterValue(const std::string &name) {
     return 0;
   }
 }
+
+} // namespace emulator

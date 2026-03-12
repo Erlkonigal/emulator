@@ -2,6 +2,8 @@
 
 #include "emulator/debug/command/command.h"
 
+namespace emulator {
+
 class RunCommand : public ICommand {
 public:
     std::string name() const override { return "run"; }
@@ -87,3 +89,5 @@ public:
 };
 
 void registerAllCommands();
+
+} // namespace emulator

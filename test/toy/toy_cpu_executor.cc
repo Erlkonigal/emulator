@@ -10,6 +10,8 @@
 
 #include "toy_isa.h"
 
+namespace emulator {
+
 namespace {
 
 using toy::kRamBase;
@@ -434,3 +436,5 @@ void ToyCpuExecutor::cycle(CommitArray &commits) {
     break;
   }
 }
+
+} // namespace emulator

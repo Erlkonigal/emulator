@@ -5,6 +5,8 @@
 
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class Terminal : public Singleton<Terminal> {
 public:
     void setup(bool enableSignals = false);
@@ -24,3 +26,5 @@ private:
     Terminal() = default;
     friend class Singleton<Terminal>;
 };
+
+} // namespace emulator

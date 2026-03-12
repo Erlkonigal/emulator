@@ -6,7 +6,10 @@
 #include <limits>
 #include <string>
 
+namespace emulator {
+
 namespace {
+
 bool applyConfigValue(RuntimeConfig *config, const std::string &key,
                       const std::string &value, std::string *error) {
     if (config == nullptr) {
@@ -59,9 +62,10 @@ bool applyConfigValue(RuntimeConfig *config, const std::string &key,
     if (error != nullptr) {
         *error = "Unknown config key: " + key;
     }
-    return false;
+return false;
 }
-}
+
+} // namespace
 
 void RuntimeConfig::reset() {
     romPath.clear();
@@ -248,3 +252,5 @@ if (arg == "--debug") {
     }
     return true;
 }
+
+} // namespace emulator

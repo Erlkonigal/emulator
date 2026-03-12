@@ -9,6 +9,8 @@
 
 namespace testutil {
 
+using emulator::CpuErrorType;
+
 std::filesystem::path RomDir();
 std::filesystem::path MakeRomPath(const std::string &name);
 

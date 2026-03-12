@@ -3,6 +3,8 @@
 #include <atomic>
 #include <thread>
 
+namespace emulator {
+
 class IThread {
 public:
     virtual ~IThread() = default;
@@ -32,3 +34,5 @@ protected:
     std::atomic<bool> mRunning{false};
     std::atomic<bool> mStarted{false};
 };
+
+} // namespace emulator

@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <mutex>
 
+namespace emulator {
+
 class NetworkInputHandler : public IThread, public Singleton<NetworkInputHandler> {
 public:
     bool start(uint16_t port = kDefaultDebugPort);
@@ -30,3 +32,5 @@ private:
     NetworkInputHandler() = default;
     friend class Singleton<NetworkInputHandler>;
 };
+
+} // namespace emulator

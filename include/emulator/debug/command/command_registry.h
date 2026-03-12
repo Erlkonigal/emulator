@@ -9,6 +9,8 @@
 #include "emulator/debug/command/command.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class DebugContext;
 
 class CommandRegistry : public Singleton<CommandRegistry> {
@@ -25,3 +27,5 @@ private:
     CommandRegistry() = default;
     friend class Singleton<CommandRegistry>;
 };
+
+} // namespace emulator

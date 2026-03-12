@@ -3,6 +3,8 @@
 #include <set>
 #include <utility>
 
+namespace emulator {
+
 enum class CommitThreadState {
     Init,
     Halted,
@@ -23,3 +25,5 @@ getCommitThreadTransitions() {
         {CommitThreadState::Step, CommitThreadState::Halted},
     };
 }
+
+} // namespace emulator

@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 
+namespace emulator {
+
 void CommitThread::init() {
     TraceManager::getInstance().createTracer<Tracer>("itrace");
 }
@@ -182,3 +184,5 @@ CommitThread::ProcessResult CommitThread::processCommits(const CommitInfo *commi
 
     return result;
 }
+
+} // namespace emulator

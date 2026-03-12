@@ -2,6 +2,8 @@
 
 #include <format>
 
+namespace emulator {
+
 void BreakPointController::list(std::vector<std::string> &out) const {
   size_t index = 0;
   for (const auto &bp : mBreakPoints) {
@@ -22,3 +24,5 @@ bool BreakPointController::contains(const uint64_t &addr) const {
 }
 
 void BreakPointController::reset() { mBreakPoints.clear(); }
+
+} // namespace emulator

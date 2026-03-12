@@ -8,7 +8,7 @@
 
 #define TRACE(name, fmt, ...) \
     do { \
-        auto& _tm = TraceManager::getInstance(); \
+        auto& _tm = emulator::TraceManager::getInstance(); \
         if (_tm.isEnabled(name)) { \
             _tm.trace(name, fmt, ##__VA_ARGS__); \
         } \

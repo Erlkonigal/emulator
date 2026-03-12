@@ -6,6 +6,13 @@
 #include "toy/toy_cpu_executor.h"
 #include "toy/toy_isa.h"
 
+using emulator::CommitArray;
+using emulator::CpuErrorType;
+using emulator::Ram;
+using emulator::Rom;
+using emulator::ToyCpuExecutor;
+using emulator::Uart;
+
 TEST(debug_uart_output_single_char) {
     std::vector<uint32_t> prog;
     

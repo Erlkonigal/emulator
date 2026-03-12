@@ -7,6 +7,8 @@
 #include "emulator/generated/hardware_config.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class RuntimeConfig : public Singleton<RuntimeConfig> {
 public:
     std::string romPath;
@@ -31,3 +33,5 @@ private:
     RuntimeConfig() = default;
     friend class Singleton<RuntimeConfig>;
 };
+
+} // namespace emulator

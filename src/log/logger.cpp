@@ -4,6 +4,8 @@
 #include <cstring>
 #include <ctime>
 
+namespace emulator {
+
 namespace {
 
 constexpr size_t kBufferSize = 4096;
@@ -134,3 +136,5 @@ Logger::Level Logger::levelFromString(std::string_view str) {
     if (str == "error") return Level::Error;
     return Level::Info;
 }
+
+} // namespace emulator

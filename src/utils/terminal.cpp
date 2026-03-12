@@ -11,7 +11,10 @@
 #include <cstdio>
 #include <cstring>
 
+namespace emulator {
+
 namespace {
+
 std::atomic<bool>* gInterruptFlag = nullptr;
 std::atomic<bool> gInterrupted{false};
 Terminal* gTerminal = nullptr;
@@ -22,7 +25,8 @@ void signalHandler(int) {
         gInterruptFlag->store(true, std::memory_order_release);
     }
 }
-}
+
+} // namespace
 
 void Terminal::setup(bool enableSignals) {
     if (mConfigured) {
@@ -161,3 +165,5 @@ void Terminal::processIo() {
 
     fsync(STDOUT_FILENO);
 }
+
+} // namespace emulator

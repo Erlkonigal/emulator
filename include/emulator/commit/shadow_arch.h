@@ -6,6 +6,8 @@
 #include "emulator/generated/hardware_config.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class ShadowArch : public Singleton<ShadowArch> {
 public:
   void init();
@@ -40,3 +42,5 @@ private:
   uint8_t* mem = nullptr;
   friend class Singleton<ShadowArch>;
 };
+
+} // namespace emulator

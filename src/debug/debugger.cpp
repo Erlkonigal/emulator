@@ -2,6 +2,8 @@
 #include "emulator/debug/command/command_registry.h"
 #include "emulator/debug/command/commands.h"
 
+namespace emulator {
+
 Debugger::Debugger() {
     registerAllCommands();
 }
@@ -14,3 +16,5 @@ void Debugger::reset() {
 void Debugger::processCommand(const std::string& command) {
     CommandRegistry::getInstance().execute(command, mContext);
 }
+
+} // namespace emulator

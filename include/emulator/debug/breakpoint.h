@@ -7,6 +7,8 @@
 
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class BreakPointController : public Singleton<BreakPointController> {
 public:
   void list(std::vector<std::string> &out) const;
@@ -20,3 +22,5 @@ private:
 
   friend class Singleton<BreakPointController>;
 };
+
+} // namespace emulator

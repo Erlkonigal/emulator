@@ -8,6 +8,8 @@
 
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class Logger : public Singleton<Logger> {
 public:
     enum class Level { Debug, Info, Warn, Error };
@@ -40,9 +42,11 @@ private:
     friend class Singleton<Logger>;
 };
 
-#define INFO(...)  Logger::getInstance().log(Logger::Level::Info, __FILE__, __LINE__, __VA_ARGS__)
-#define DEBUG(...) Logger::getInstance().log(Logger::Level::Debug, __FILE__, __LINE__, __VA_ARGS__)
-#define WARN(...)  Logger::getInstance().log(Logger::Level::Warn, __FILE__, __LINE__, __VA_ARGS__)
-#define ERROR(...) Logger::getInstance().log(Logger::Level::Error, __FILE__, __LINE__, __VA_ARGS__)
-#define RAW(...)   Logger::getInstance().raw(__VA_ARGS__)
+} // namespace emulator
+
+#define INFO(...)  emulator::Logger::getInstance().log(emulator::Logger::Level::Info, __FILE__, __LINE__, __VA_ARGS__)
+#define DEBUG(...) emulator::Logger::getInstance().log(emulator::Logger::Level::Debug, __FILE__, __LINE__, __VA_ARGS__)
+#define WARN(...)  emulator::Logger::getInstance().log(emulator::Logger::Level::Warn, __FILE__, __LINE__, __VA_ARGS__)
+#define ERROR(...) emulator::Logger::getInstance().log(emulator::Logger::Level::Error, __FILE__, __LINE__, __VA_ARGS__)
+#define RAW(...)   emulator::Logger::getInstance().raw(__VA_ARGS__)
 #define LINE(...) do { RAW(__VA_ARGS__); RAW("\n"); } while(0)

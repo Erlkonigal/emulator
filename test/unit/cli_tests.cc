@@ -6,6 +6,8 @@
 
 #include "emulator/runtime_config.h"
 
+using emulator::RuntimeConfig;
+
 namespace {
 
 std::vector<char *> MakeArgv(const std::vector<std::string> &args,

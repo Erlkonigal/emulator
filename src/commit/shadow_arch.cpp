@@ -4,6 +4,8 @@
 #include <sys/mman.h>
 #include <cstring>
 
+namespace emulator {
+
 void ShadowArch::init() {
   if (mem != nullptr) {
     munmap(mem, kRamSize);
@@ -58,3 +60,5 @@ void ShadowArch::update(const CommitInfo &commit) {
     }
   }
 }
+
+} // namespace emulator

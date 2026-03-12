@@ -13,11 +13,15 @@
 
 #include <cstring>
 
+namespace emulator {
+
 namespace {
+
 void sendLine(int fd, const std::string& line) {
     std::string data = line + "\n";
     send(fd, data.c_str(), data.size(), MSG_NOSIGNAL);
 }
+
 } // namespace
 
 void NetworkInputHandler::broadcast(const std::string& message) {
@@ -223,3 +227,5 @@ void NetworkInputHandler::handleClient(int clientFd) {
         mClientFd = -1;
     }
 }
+
+} // namespace emulator

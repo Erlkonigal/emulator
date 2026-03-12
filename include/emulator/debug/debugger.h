@@ -7,6 +7,8 @@
 #include "emulator/debug/debug_context.h"
 #include "emulator/utils/singleton.h"
 
+namespace emulator {
+
 class Debugger : public Singleton<Debugger> {
 public:
     void reset();
@@ -38,3 +40,5 @@ private:
     Debugger();
     friend class Singleton<Debugger>;
 };
+
+} // namespace emulator
